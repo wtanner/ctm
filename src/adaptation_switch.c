@@ -61,6 +61,10 @@
 #include <genaudio.h>
 #endif
 
+#ifdef __OpenBSD__
+#include <sys/types.h>
+#endif
+
 /***********************************************************************/
 
 void writeHead()
@@ -400,6 +404,16 @@ int main(int argc, const char** argv)
             for (cnt=0; cnt<LENGTH_TONE_VEC; cnt++)
               inputSignalBufferLeft[cnt]=0;
           }
+
+#ifdef LSBFIRST
+        else {
+                /* The test pattern baudot PCM files are in big-endian. If we are on a little-endian machine, we will need to swap the bytes */
+                for (cnt=0; cnt<LENGTH_TONE_VEC; cnt++)
+                {
+                        inputSignalBufferLeft[cnt] = swap16(inputSignalBufferLeft[cnt]);
+                }
+        }
+#endif
       
       if (ctmReadFromFile)
         if(fread(inputSignalBufferRight, sizeof(Shortint), 
@@ -410,6 +424,16 @@ int main(int argc, const char** argv)
             for (cnt=0; cnt<LENGTH_TONE_VEC; cnt++)
               inputSignalBufferRight[cnt]=0;
           }
+
+#ifdef LSBFIRST
+        else {
+                /* The test pattern baudot PCM files are in big-endian. If we are on a little-endian machine, we will need to swap the bytes */
+                for (cnt=0; cnt<LENGTH_TONE_VEC; cnt++)
+                {
+                        inputSignalBufferRight[cnt] = swap16(inputSignalBufferRight[cnt]);
+                }
+        }
+#endif
       
       /* As long as the Baudot Code Modulator is active: Mute the Baudot   */
       /* input signal in order to get rid of the echoes from the PSTN side */
@@ -695,6 +719,14 @@ int main(int argc, const char** argv)
 #endif
       
       if (baudotWriteToFile)
+      {
+#ifdef LSBFIRST
+        /* The test pattern baudot PCM files are in big-endian. If we are on a little-endian machine, we will need to swap the bytes */
+        for (cnt=0; cnt<LENGTH_TONE_VEC; cnt++)
+        {
+                txToneVecLeft[cnt] = swap16(txToneVecLeft[cnt]);
+        }
+#endif
         if (fwrite(txToneVecLeft, sizeof(Shortint), 
                    LENGTH_TONE_VEC, baudotOutputFileFp) < LENGTH_TONE_VEC)
           {
@@ -702,8 +734,17 @@ int main(int argc, const char** argv)
                     baudotOutputFileName);
             exit(1);
           }
+      }
       
       if (ctmWriteToFile)
+      {
+#ifdef LSBFIRST
+        /* The test pattern baudot PCM files are in big-endian. If we are on a little-endian machine, we will need to swap the bytes */
+        for (cnt=0; cnt<LENGTH_TONE_VEC; cnt++)
+        {
+                txToneVecRight[cnt] = swap16(txToneVecRight[cnt]);
+        }
+#endif
         if (fwrite(txToneVecRight, sizeof(Shortint), 
                    LENGTH_TONE_VEC, ctmOutputFileFp) < LENGTH_TONE_VEC)
           {
@@ -711,6 +752,7 @@ int main(int argc, const char** argv)
                     ctmOutputFileName);
             exit(1);
           }
+      }
       
       /* The loop is exited, if both input files do not contain any */
       /* samples and if both transmitters are no longer busy.       */
