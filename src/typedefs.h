@@ -188,6 +188,8 @@ typedef int Bool;
 #define PCLINUX
 #define PLATFORM "PCLINUX"
 #define LSBFIRST
+#elif defined(__OpenBSD__) && (__BYTE_ORDER == __LITTLE_ENDIAN)
+#define LSBFIRST
 #else
 #error "can't determine architecture; adapt typedefs.h to your platform"
 #endif
