@@ -1,0 +1,110 @@
+#******************************************************************************
+#*
+#*      
+#*
+#******************************************************************************
+#*
+#*      File             : Makefile.vc
+#*      Author           : EED/N/RV Volker Springer
+#*      Tested Platforms : Win NT 4.0, Microsoft Visual C++ 6.0
+#*      Description      : Makefile for Ericssom Modem Tone Solution for TTY
+#*                         for Microsoft Visual C
+#*      Doc Id           : $Id: $
+#*
+#*      Revision history
+#*
+#******************************************************************************
+#*
+#*
+#* use:
+#* nmake /f Makefile.vc          for compiling
+#* nmake /f Makefile.vc clean    for cleaning directory
+#*
+#******************************************************************************
+
+MODE         = FAST
+EXTRA_CFLAGS = 
+
+#
+# check operating system
+#
+!IF "$(OS)" == "Windows_NT"
+NULL=
+!ELSE 
+NULL=nul
+!ENDIF
+
+#
+# compiler and linker program settings
+#
+CC      = cl.exe
+LINK    = link.exe
+
+GUILIBS = winmm.lib
+
+#
+# compile definitions
+#
+DEFINITIONS =   /D "WIN32" /D "_WINDOWS" 
+
+CFLAGS_FAST  = /nologo /O2 /GD /GB $(DEFINITIONS)
+CFLAGS_DEBUG = /nologo /DDEBUG /DVERBOSE /MTd /Yd /W3 /Od /Zi /Gm /GX /YX $(DEFINITIONS)
+
+!IF "$(MODE)" == "FAST" 
+CFLAGS  = $(CFLAGS_FAST) $(EXTRA_CFLAGS)
+!ELSEIF "$(MODE)" == "DEBUG" 
+CFLAGS  = $(CFLAGS_DEBUG) $(EXTRA_CFLAGS)
+!ENDIF
+
+#------------------------------------------------------------------------------
+# 
+#
+TTY_CINCLUDES   = /I . 
+TTY_CFLAGS        = $(TTY_CINCLUDES) $(DLLBUILD)
+TTY_DIR           = .
+TTY_SOURCES       = \
+					$(TTY_DIR)\wait_for_sync.c          \
+					$(TTY_DIR)\m_sequence.c             \
+					$(TTY_DIR)\diag_interleaver.c       \
+					$(TTY_DIR)\diag_deinterleaver.c     \
+					$(TTY_DIR)\init_interleaver.c       \
+					$(TTY_DIR)\conv_encoder.c           \
+					$(TTY_DIR)\viterbi.c                \
+					$(TTY_DIR)\conv_poly.c              \
+					$(TTY_DIR)\tonedemod.c              \
+					$(TTY_DIR)\tonemod.c                \
+					$(TTY_DIR)\ctm_transmitter.c        \
+   					$(TTY_DIR)\ctm_receiver.c           \
+					$(TTY_DIR)\baudot_functions.c       \
+					$(TTY_DIR)\ucs_functions.c          \
+					$(TTY_DIR)\parse_arg.c              \
+					$(TTY_DIR)\fifo.c                   \
+					$(TTY_DIR)\sin_fip.c
+
+
+TTY_OBJECTS       =  $(TTY_SOURCES:.c=.obj)
+{$(TTY_DIR)}.c{$(TTY_DIR)}.obj: 
+    $(CC) $(CFLAGS) $(EXTRA_CFLAGS) $(TTY_CFLAGS) /Fo$@ /c $<
+
+#------------------------------------------------------------------------------
+#
+# list of all objects for the DLL
+#
+ALL_OBJECTS      =  $(TTY_OBJECTS)
+
+#------------------------------------------------------------------------------
+# target list
+#
+ALL :  adaptation_switch.exe
+
+
+CLEAN :
+	-@for %i in ( $(TTY_OBJECTS) ) do del /Q %i
+	-@for /r %i in (*.pdb;*.idb) do del /Q %i
+	-@del /Q  adaptation_switch.exe  adaptation_switch.obj
+
+"adaptation_switch.exe" : $(ALL_OBJECTS)  $(TTY_DIR)\adaptation_switch.obj 
+	$(LINK) /out:$@ /PDB:adaptation_switch.pdb \
+	/PDBTYPE:SEPT /DEBUG /DEBUGTYPE:BOTH \
+	$(ALL_OBJECTS) 	$(TTY_DIR)\adaptation_switch.obj \
+		$(ESRAPILIB) $(TCLLIB) $(GUILIBS)

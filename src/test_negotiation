@@ -1,0 +1,148 @@
+#!/bin/csh -f
+#
+#############################################################################
+#
+# Shell script (for csh - "shell command interpreter with a C-like syntax")
+# for testing the adaptation between BaudotTones and the Cellular Text 
+# Telephone Modem. Although the transmission is tested only in one 
+# direction (forward), also the backward link has to be executed in order
+# to have a valid negotiation. For the same reason, each module has to be
+# executed twice.
+#
+# After executing each of the modules twice, the signal baudot_out.pcm
+# is analyzed. This analysis is performed by the program adaptation_switch. 
+# First, we use the Baudot dectecor of adaptation_switch for this analysis 
+# in order to examine whether the regenerated Baudot signal can be decoded 
+# correctly. In a second step we examine whether the regenarated signal 
+# still contains any CTM preambles. This investigation is performed by means 
+# of the CTM detector that is integrated in adaptation_switch. This last 
+# test fails if the CTM detector is able to detect any CTM preamble in the 
+# regenerated signal.
+#
+# It is assumed that the executable  adaptation_switch
+# has been installed into the directory  ./solaris
+# that all test patterns are stored in the directory ./patterns
+# and that all output files can be written ino ./output
+#
+#############################################################################
+#
+#                -----------   ctm_forward    -----------
+# baudot.pcm --->|         | ---------------->|         |---> baudot_out.pcm
+#                | adapt#1 |                  | adapt#2 |
+#  /dev/null <---|         | <----------------|         |<--- /dev/zero
+#                -----------   ctm_backward   -----------
+#
+#############################################################################
+#
+#      COPYRIGHT (C) 2000 BY ERICSSON EUROLAB DEUTSCHLAND GmbH
+#      90411 NUERNBERG, GERMANY, Tel Int + 49 911 5217 100
+#
+#      The program(s) may be used and/or copied only with the
+#      written permission from Ericsson or in accordance
+#      with the terms and conditions stipulated in the agreement or
+#      contract under which the program(s) have been supplied.
+#
+#############################################################################
+
+
+# Create directory for output data, if it does not exist already...
+if ( !(-e ./output) ) then
+  mkdir output
+endif
+
+###########################################################################
+# Execute the adaptation module #1 for the first time. At this first run, the
+# signal ctm_backward isn't known. Therefore, the negotiation does not get
+# an acklowledge, so that the transmission falls back to Baudot Tones.
+###########################################################################
+
+echo " "
+echo "====================================================="
+echo "Execute adaptation module #1 (first pass)            "
+echo "====================================================="
+
+solaris/adaptation_switch  \
+   -baudotin patterns/baudot.pcm        -ctmin     patterns/zeros4000.pcm \
+   -ctmout   output/ctm_forward1.pcm  -baudotout /dev/null \
+   -numsamples 100000
+
+###########################################################################
+# Execute the adaptation module #2 for the first time.
+###########################################################################
+
+echo " "
+echo "====================================================="
+echo "Execute adaptation module #2 (first pass)            "
+echo "====================================================="
+
+solaris/adaptation_switch  \
+   -baudotin patterns/zeros4000.pcm      -ctmin     output/ctm_forward1.pcm \
+   -ctmout   output/ctm_backward1.pcm  -baudotout /dev/null 
+
+###########################################################################
+# Execute the adaptation module #1 for the second time. With this second
+# run, the signal ctm_backward is valid. Therefore, the negotiation 
+# receives a valid acknowledge, so that CTM signals are transmitted.
+###########################################################################
+
+echo " "
+echo "====================================================="
+echo "Execute adaptation module #1 (second pass)           "
+echo "====================================================="
+
+solaris/adaptation_switch  \
+   -baudotin patterns/baudot.pcm        -ctmin output/ctm_backward1.pcm \
+   -ctmout   output/ctm_forward2.pcm  -baudotout /dev/null
+
+###########################################################################
+# Execute the adaptation module #2 for the second time. With this run,
+# we receive a valid CTM signal so that the baudot_out signal can be 
+# generated.
+###########################################################################
+
+echo " "
+echo "====================================================="
+echo "Execute adaptation module #2 (second pass)           "
+echo "====================================================="
+
+solaris/adaptation_switch  \
+   -baudotin patterns/zeros4000.pcm      -ctmin     output/ctm_forward2.pcm \
+   -ctmout   output/ctm_backward2.pcm  -baudotout output/baudot_out.pcm \
+   -textout  output/decoded.txt
+
+
+###########################################################################
+# Now we try to decode the signal baudot_out.pcm. The text shall be
+# displayed on the screen without any errors...
+###########################################################################
+
+echo " "
+echo "===================================================================="
+echo "Now we try to decode the regenerated Baudot signal. The text message"
+echo "shall be decoded completely now..."
+echo "===================================================================="
+
+solaris/adaptation_switch  \
+   -baudotin output/baudot_out.pcm  -ctmin     patterns/zeros4000.pcm \
+   -ctmout   /dev/null               -baudotout /dev/null \
+   -nonegotiation
+
+
+###########################################################################
+# Now we do a test to confirm that the regenerated Baudot signal does not
+# contain any CTM headers. This is tested by sending the regenerated 
+# Baudot signal to a CTM receiver, which shall stay in idle mode.
+########################################################################### 
+
+echo " "
+echo "====================================================================="
+echo "Testing whether the regenerated Baudot signal is free of CTM headers."
+echo "No CTM burst shall be detected now..."
+echo "====================================================================="
+
+solaris/adaptation_switch  \
+   -baudotin patterns/zeros4000.pcm  -ctmin   output/baudot_out.pcm \
+   -ctmout   /dev/null              -baudotout /dev/null \
+   -nonegotiation
+
+
