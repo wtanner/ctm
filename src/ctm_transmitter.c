@@ -47,7 +47,7 @@ const char ctm_transmitter_id[] = "@(#)$Id: $" ctm_transmitter_h;
 #include "ucs_functions.h"
 
 #include <typedefs.h>
-
+#include <stdlib.h>
 #include <fifo.h>
 #include <stdio.h> 
 

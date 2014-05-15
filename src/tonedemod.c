@@ -24,7 +24,7 @@
 #include "sin_fip.h"
 
 #include <typedefs.h>
-
+#include <stdlib.h>
 #include <stdio.h>    
 
 const char tonedemod_id[] = "@(#)$Id: $" tonedemod_h;

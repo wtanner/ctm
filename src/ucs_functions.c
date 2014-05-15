@@ -34,7 +34,7 @@ const char ucs_functions_id[] = "@(#)$Id: $" ucs_functions_h;
 #include "fifo.h"
 
 #include <stdio.h>
-
+#include <stdlib.h>
 
 /* Definition of row 00 (Basic Latin & Latin-1 Supplement)      */
 /* of the Basic Multilingual Plane accoring to ISO/IEC 10646-1  */

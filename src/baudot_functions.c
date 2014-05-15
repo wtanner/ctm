@@ -29,6 +29,7 @@
 const char baudot_functions_id[] = "@(#)$Id: $" baudot_functions_h;
 
 #include <stdio.h>
+#include <stdlib.h>
 
 /*
 *******************************************************************************

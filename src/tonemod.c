@@ -29,7 +29,7 @@
 #include "sin_fip.h"
 
 #include <typedefs.h>
-
+#include <stdlib.h>
 #include <stdio.h>    
 
 const char tonemod_id[] = "@(#)$Id: $" tonemod_h;

@@ -396,6 +396,7 @@ int main(int argc, const char** argv)
       
       /* Read next frame of input samples from files */
       if (baudotReadFromFile)
+      {
         if(fread(inputSignalBufferLeft, sizeof(Shortint), 
                  LENGTH_TONE_VEC, baudotInputFileFp) < LENGTH_TONE_VEC)
           {
@@ -414,8 +415,10 @@ int main(int argc, const char** argv)
                 }
         }
 #endif
+      }
       
       if (ctmReadFromFile)
+      {
         if(fread(inputSignalBufferRight, sizeof(Shortint), 
                  LENGTH_TONE_VEC, ctmInputFileFp) < LENGTH_TONE_VEC)
           {
@@ -434,6 +437,7 @@ int main(int argc, const char** argv)
                 }
         }
 #endif
+      }
       
       /* As long as the Baudot Code Modulator is active: Mute the Baudot   */
       /* input signal in order to get rid of the echoes from the PSTN side */

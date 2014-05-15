@@ -15,7 +15,7 @@
 #include "ctm_defines.h"   /* CHC_RATE */
 #include "conv_poly.h"
 #include <typedefs.h>
-
+#include <stdlib.h>
 #include <stdio.h>
 
 

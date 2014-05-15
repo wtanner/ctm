@@ -21,7 +21,7 @@
 #include "m_sequence.h"
 
 #include <typedefs.h>
-
+#include <stdlib.h>
 #include <stdio.h>    
 
 const char m_sequence_id[] = "@(#)$Id: $" m_sequence_h;
