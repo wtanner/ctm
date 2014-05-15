@@ -1,4 +1,4 @@
 ctm
 ===
 
-Cellular Text Modem
+Cellular Text Modem, based on the 3GPP reference implementation.
