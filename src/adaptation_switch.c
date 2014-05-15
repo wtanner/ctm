@@ -93,7 +93,8 @@ void errorMsg(const char* filename)
   fprintf(stderr, "  -textout    <text_file>    output text file from CTM receiver (optional)\n");
   fprintf(stderr, "  -numsamples <number>       number of samples to process (optional)\n");
   fprintf(stderr, "  -nonegotiation             disables the negotiation (optional)\n");
-  fprintf(stderr, "  -nobypass                  disables the signal bypass (optional)\n\n");
+  fprintf(stderr, "  -nobypass                  disables the signal bypass (optional)\n");
+  fprintf(stderr, "  -compat                     enables compatibility mode with 3GPP test files (optional)\n\n");
   exit(1);
 }
 
@@ -143,6 +144,8 @@ int main(int argc, const char** argv)
   Bool         earlyMutingRequired       = false;
   Bool         baudotAlreadyReceived     = false;
   Bool         actualBaudotCharDetected  = false;
+
+  Bool         compat_mode               = false;
   
   tx_state_t   tx_state;
   rx_state_t   rx_state;
@@ -194,10 +197,10 @@ int main(int argc, const char** argv)
   /* parse the argument line */
   for (cnt=1; cnt<argc; cnt++)
     {
-      optindex = get_option(argc, argv, cnt, 9, "-h", 
+      optindex = get_option(argc, argv, cnt, 10, "-h", 
                             "-ctmin", "-ctmout", "-baudotin", "-baudotout", 
                             "-textout", "-numsamples", 
-                            "-nonegotiation", "-nobypass");
+                            "-nonegotiation", "-nobypass", "-compat");
       if (optindex<0)
         break;
       
@@ -270,6 +273,9 @@ int main(int argc, const char** argv)
           break;
         case 8:
           disableBypass = true;
+          break;
+        case 9:
+          compat_mode = true;
           break;
         default:
           fprintf(stderr, "\nerror: unknown option: %s\n", argv[cnt]);
@@ -407,7 +413,8 @@ int main(int argc, const char** argv)
           }
 
 #ifdef LSBFIRST
-        else {
+        else if (compat_mode)
+        {
                 /* The test pattern baudot PCM files are in big-endian. If we are on a little-endian machine, we will need to swap the bytes */
                 for (cnt=0; cnt<LENGTH_TONE_VEC; cnt++)
                 {
@@ -429,7 +436,8 @@ int main(int argc, const char** argv)
           }
 
 #ifdef LSBFIRST
-        else {
+        else if (compat_mode)
+        {
                 /* The test pattern baudot PCM files are in big-endian. If we are on a little-endian machine, we will need to swap the bytes */
                 for (cnt=0; cnt<LENGTH_TONE_VEC; cnt++)
                 {
@@ -726,9 +734,12 @@ int main(int argc, const char** argv)
       {
 #ifdef LSBFIRST
         /* The test pattern baudot PCM files are in big-endian. If we are on a little-endian machine, we will need to swap the bytes */
-        for (cnt=0; cnt<LENGTH_TONE_VEC; cnt++)
+        if (compat_mode)
         {
-                txToneVecLeft[cnt] = swap16(txToneVecLeft[cnt]);
+          for (cnt=0; cnt<LENGTH_TONE_VEC; cnt++)
+          {
+                  txToneVecLeft[cnt] = swap16(txToneVecLeft[cnt]);
+          }
         }
 #endif
         if (fwrite(txToneVecLeft, sizeof(Shortint), 
@@ -744,9 +755,12 @@ int main(int argc, const char** argv)
       {
 #ifdef LSBFIRST
         /* The test pattern baudot PCM files are in big-endian. If we are on a little-endian machine, we will need to swap the bytes */
-        for (cnt=0; cnt<LENGTH_TONE_VEC; cnt++)
+        if (compat_mode)
         {
-                txToneVecRight[cnt] = swap16(txToneVecRight[cnt]);
+          for (cnt=0; cnt<LENGTH_TONE_VEC; cnt++)
+          {
+                  txToneVecRight[cnt] = swap16(txToneVecRight[cnt]);
+          }
         }
 #endif
         if (fwrite(txToneVecRight, sizeof(Shortint), 
