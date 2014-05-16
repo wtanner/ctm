@@ -91,6 +91,7 @@ void errorMsg(const char* filename)
   fprintf(stderr, "  -baudotin   <input_file>   input file with Baudot Tones \n");
   fprintf(stderr, "  -baudotout  <output_file>  output file for Baudot Tones \n");
   fprintf(stderr, "  -textout    <text_file>    output text file from CTM receiver (optional)\n");
+  fprintf(stderr, "  -textin     <text_file>    input text file to CTM transmitter (optional)\n");
   fprintf(stderr, "  -numsamples <number>       number of samples to process (optional)\n");
   fprintf(stderr, "  -nonegotiation             disables the negotiation (optional)\n");
   fprintf(stderr, "  -nobypass                  disables the signal bypass (optional)\n");
@@ -126,11 +127,12 @@ int main(int argc, const char** argv)
 
   Bool         sineOutput                = false;
   Bool         writeToTextFile           = false;
+  Bool         read_from_text_file       = false;
   
-  Bool         ctmReadFromFile           = true; /* By default, all signals */
-  Bool         baudotReadFromFile        = true; /* are read from and are   */
-  Bool         ctmWriteToFile            = true; /* written to files.       */
-  Bool         baudotWriteToFile         = true;
+  Bool         ctmReadFromFile           = false;
+  Bool         baudotReadFromFile        = false;
+  Bool         ctmWriteToFile            = false;
+  Bool         baudotWriteToFile         = false;
   
   Bool         ctmFromFarEndDetected     = false;
   Bool         ctmCharacterTransmitted   = false;
@@ -174,12 +176,14 @@ int main(int argc, const char** argv)
   FILE  *ctmOutputFileFp    = NULL;
   FILE  *baudotOutputFileFp = NULL;
   FILE  *textOutputFileFp   = NULL;
+  FILE  *text_input_file_fp = NULL;
   
   const char* ctmInputFileName     = NULL;
   const char* baudotInputFileName  = NULL;
   const char* ctmOutputFileName    = NULL;
   const char* baudotOutputFileName = NULL;
   const char* textOutputFileName   = NULL;
+  const char* text_input_filename  = NULL;
   
 #ifdef PCAUDIO /* only if real-time audio I/O is desired */
   audio_caps_t audio_caps = { 8000, 16, STEREO };
@@ -197,10 +201,10 @@ int main(int argc, const char** argv)
   /* parse the argument line */
   for (cnt=1; cnt<argc; cnt++)
     {
-      optindex = get_option(argc, argv, cnt, 10, "-h", 
+      optindex = get_option(argc, argv, cnt, 11, "-h", 
                             "-ctmin", "-ctmout", "-baudotin", "-baudotout", 
                             "-textout", "-numsamples", 
-                            "-nonegotiation", "-nobypass", "-compat");
+                            "-nonegotiation", "-nobypass", "-compat", "-textin");
       if (optindex<0)
         break;
       
@@ -276,6 +280,24 @@ int main(int argc, const char** argv)
           break;
         case 9:
           compat_mode = true;
+          break;
+        case 10:
+          cnt++;
+          read_from_text_file = true;
+
+          if (baudotReadFromFile)
+          {
+            /* mutually exclusive inputs were specified. */
+            fprintf(stderr, "\nwarning: baudot input and text input were both specified. Ignoring baudot input.\n");
+            baudotReadFromFile = false;
+          }
+
+          text_input_filename = get_argument(argc, argv, cnt);
+          if (text_input_filename==(char*)NULL)
+          {
+              fprintf(stderr, "\nerror: undetermined text input filename!\n");
+              errorMsg(argv[0]);
+          }
           break;
         default:
           fprintf(stderr, "\nerror: unknown option: %s\n", argv[cnt]);
@@ -358,7 +380,15 @@ int main(int argc, const char** argv)
           exit(1);
         }
     }
-
+  if (read_from_text_file)
+  {
+    text_input_file_fp = fopen(text_input_filename, "r");
+    if (text_input_file_fp == (FILE*)NULL)
+    {
+      fprintf(stderr, "can't open input file '%s'\n", text_input_filename);
+      exit(1);
+    }
+  }
 #ifdef PCAUDIO /* if desired, open audio device for duplex i/o */
   fprintf(stderr, "opening audio device for duplex i/o...\n");
   if (generic_audio_init (&audio_caps, AUDIO_DUPLEX))
@@ -440,7 +470,7 @@ int main(int argc, const char** argv)
         {
                 /* The test pattern baudot PCM files are in big-endian. If we are on a little-endian machine, we will need to swap the bytes */
                 for (cnt=0; cnt<LENGTH_TONE_VEC; cnt++)
-                {
+               {
                         inputSignalBufferRight[cnt] = swap16(inputSignalBufferRight[cnt]);
                 }
         }
@@ -656,7 +686,7 @@ int main(int argc, const char** argv)
       /* Otherwise, the audio samples are bypassed!                         */
       
       if((((Shortint_fifo_check(&baudotOutTTYCodeFifoState)>0) || 
-           (actualBaudotCharDetected || (cntHangoverFramesForMuteBaudot>0) )) && 
+           (actualBaudotCharDetected || (cntHangoverFramesForMuteBaudot>0) ) || read_from_text_file) && 
           (ctmFromFarEndDetected || (cntFramesSinceBurstInit<ENQUIRY_TIMEOUT))) ||
          (Shortint_fifo_check(&baudotToCtmFifoState)>0) || 
          (numCTMBitsStillToModulate>0) || tx_state.burstActive ||
@@ -671,9 +701,10 @@ int main(int argc, const char** argv)
           /* and if the CTM transmitter is able to process a new character: */
           /* pop the character from the fifo.                               */
           
-          if ((Shortint_fifo_check(&baudotOutTTYCodeFifoState)>0) &&
-              (Shortint_fifo_check(&baudotToCtmFifoState)==0) &&
-              (ctmFromFarEndDetected || (cntFramesSinceBurstInit<ENQUIRY_TIMEOUT)))
+          if ((ctmFromFarEndDetected || (cntFramesSinceBurstInit<ENQUIRY_TIMEOUT)) &&
+              (Shortint_fifo_check(&baudotToCtmFifoState)==0))
+          {
+            if (Shortint_fifo_check(&baudotOutTTYCodeFifoState)>0)
             {
               Shortint_fifo_pop(&baudotOutTTYCodeFifoState, &ttyCode, 1);
               character = convertTTYcode2char(ttyCode);
@@ -681,6 +712,18 @@ int main(int argc, const char** argv)
               ucsCode = convertChar2UCScode(character);
               Shortint_fifo_push(&baudotToCtmFifoState, &ucsCode, 1);
             }
+
+            /* otherwise we are reading from a text file. */
+            else if (read_from_text_file)
+            {
+              if (fread(&character, sizeof(character), 1, text_input_file_fp) > 0)
+              {
+                fprintf(stderr, "%c", character);
+                ucsCode = convertChar2UCScode(character);
+                Shortint_fifo_push(&baudotToCtmFifoState, &ucsCode, 1);
+              }
+            }
+          }
           
           if ((Shortint_fifo_check(&baudotToCtmFifoState)>0) &&
               (numCTMBitsStillToModulate<2*LENGTH_TX_BITS))
