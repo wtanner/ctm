@@ -47,6 +47,7 @@
 
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 
 #ifndef PC
 #include <ctype.h>      /* toupper() */
@@ -99,6 +100,45 @@ void errorMsg(const char* filename)
   exit(1);
 }
 
+FILE* open_input_file_or_stdin(const char *filename)
+{
+  FILE *file_fd;
+  if (!strncmp(filename, "-", 1))
+  {
+    file_fd = stdin;
+  }
+  else
+  {
+    file_fd = fopen(filename, "r");
+    if (file_fd == (FILE*)NULL)
+    {
+      fprintf(stderr, "can't open input file '%s'\n", filename);
+      exit(1);
+    }
+  }
+
+  return file_fd;
+}
+
+FILE* open_output_file_or_stdout(const char *filename)
+{
+  FILE *file_fd;
+  if (!strncmp(filename, "-", 1))
+  {
+    file_fd = stdout;
+  }
+  else
+  {
+    file_fd = fopen(filename, "w");
+    if (file_fd == (FILE*)NULL)
+    {
+      fprintf(stderr, "can't open output file '%s'\n", filename);
+      exit(1);
+    }
+  }
+
+  return file_fd;
+}
 /***********************************************************************/
 
 int main(int argc, const char** argv)
@@ -337,57 +377,27 @@ int main(int argc, const char** argv)
   /* open all required files for signal input and output */
   if (ctmReadFromFile)
     {
-      ctmInputFileFp = fopen(ctmInputFileName, "rb");
-      if (ctmInputFileFp==(FILE*)NULL)
-        {
-          fprintf(stderr, "can't open input file '%s'\n", ctmInputFileName);
-          exit(1);
-        }
+      ctmInputFileFp = open_input_file_or_stdin(ctmInputFileName);
     }
   if (ctmWriteToFile)
     {
-      ctmOutputFileFp = fopen(ctmOutputFileName, "wb");
-      if (ctmOutputFileFp==(FILE*)NULL)
-        {
-          fprintf(stderr, "can't open output file '%s'\n", ctmOutputFileName);
-          exit(1);
-        }
+      ctmOutputFileFp = open_output_file_or_stdout(ctmOutputFileName);
     }
   if (baudotReadFromFile)
     {
-      baudotInputFileFp = fopen(baudotInputFileName, "rb");
-      if (baudotInputFileFp==(FILE*)NULL)
-        {
-          fprintf(stderr, "can't open input file '%s'\n", baudotInputFileName);
-          exit(1);
-        }
+      baudotInputFileFp = open_input_file_or_stdin(baudotInputFileName);
     }
   if (baudotWriteToFile)
     {
-      baudotOutputFileFp = fopen(baudotOutputFileName, "wb");
-      if (baudotOutputFileFp==(FILE*)NULL)
-        {
-          fprintf(stderr, "can't open output file '%s'\n", baudotOutputFileName);
-          exit(1);
-        }
+      baudotOutputFileFp = open_output_file_or_stdout(baudotOutputFileName);
     }
   if (writeToTextFile)
     {
-      textOutputFileFp = fopen(textOutputFileName, "w");
-      if (textOutputFileFp==(FILE*)NULL)
-        {
-          fprintf(stderr, "can't open output file '%s'\n", textOutputFileName);
-          exit(1);
-        }
+      textOutputFileFp = open_output_file_or_stdout(textOutputFileName);
     }
   if (read_from_text_file)
   {
-    text_input_file_fp = fopen(text_input_filename, "r");
-    if (text_input_file_fp == (FILE*)NULL)
-    {
-      fprintf(stderr, "can't open input file '%s'\n", text_input_filename);
-      exit(1);
-    }
+    text_input_file_fp = open_input_file_or_stdin(text_input_filename);
   }
 #ifdef PCAUDIO /* if desired, open audio device for duplex i/o */
   fprintf(stderr, "opening audio device for duplex i/o...\n");
