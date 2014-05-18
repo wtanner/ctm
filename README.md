@@ -25,12 +25,14 @@ By default, ctm will use the default audio device to transmit and receive CTM si
 
 If CTM input and/or output file are specified, the sound device will not be used, and all CTM transmissions and receptions will go through the specified files. Note that these files can be stdin/stdout, audio devices, FIFOs (see mkfifo(1)), /dev/null, etc.
 
+Text mode:
                      +------------+                
     Input text  ---> |            | ---> CTM signal
                      | adaptation |                
     Output text <--- |            | <--- CTM signal
                      +------------+                
 
+Baudot mode:
                      +------------+                
   Baudot Tones  ---> |            | ---> CTM signal
                      | adaptation |                
@@ -49,3 +51,18 @@ use: %s [ arguments ]
   -nobypass                  disables the signal bypass (optional)
   -compat                     enables compatibility mode with 3GPP test files (optional)
   -ctmdevice <device_name>   audio device to use for CTM signals (optional)
+
+Examples
+===
+
+1> ctm
+
+Reads from stdin and writes to stdout. The CTM modem communicates via the default audio device.
+
+2> ctm -nonegotiation -textout - -textin -
+
+The same as running 1, but does not do ENQUIRY handshaking.
+
+3> ctm -textin file1.txt -textout file2.txt -ctmdevice snd/0
+
+Use "snd/0" as the CTM modem audio communication device, reading text input from file1.txt and writing text output to file2.txt.
