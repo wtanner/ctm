@@ -40,7 +40,6 @@
 #include "ctm_receiver.h"
 #include "baudot_functions.h"
 #include "ucs_functions.h"
-
 #include <typedefs.h>
 #include <fifo.h>
 #include <parse_arg.h>
@@ -58,12 +57,10 @@
 //#define PCAUDIO
 #endif
 
-#ifdef PCAUDIO /* include audio I/O library if desired (PC platforms only) */
-#include <genaudio.h>
-#endif
-
 #ifdef __OpenBSD__
 #include <sys/types.h>
+#include <sndio.h>
+#define PCAUDIO
 #endif
 
 /***********************************************************************/
@@ -162,8 +159,8 @@ int main(int argc, const char** argv)
   
   char         character;
       
-  Shortint     txToneVecLeft[LENGTH_TONE_VEC];
-  Shortint     txToneVecRight[LENGTH_TONE_VEC];
+  Shortint     baudot_output_buffer[LENGTH_TONE_VEC];
+  Shortint     ctm_output_buffer[LENGTH_TONE_VEC];
 
   Bool         sineOutput                = false;
   Bool         writeToTextFile           = false;
@@ -188,6 +185,7 @@ int main(int argc, const char** argv)
   Bool         actualBaudotCharDetected  = false;
 
   Bool         compat_mode               = false;
+  Bool         ctm_audio_dev_mode        = true; /* by default, we will use the default system audio device for CTM I/O. */
   
   tx_state_t   tx_state;
   rx_state_t   rx_state;
@@ -206,8 +204,8 @@ int main(int argc, const char** argv)
   fifo_state_t  baudotToCtmFifoState;
   fifo_state_t  ctmToBaudotFifoState;
 
-  Shortint   inputSignalBufferLeft[LENGTH_TONE_VEC];
-  Shortint   inputSignalBufferRight[LENGTH_TONE_VEC];
+  Shortint   baudot_input_buffer[LENGTH_TONE_VEC];
+  Shortint   ctm_input_buffer[LENGTH_TONE_VEC];
 
   /* Define file variables */
   
@@ -215,8 +213,8 @@ int main(int argc, const char** argv)
   FILE  *baudotInputFileFp  = NULL;
   FILE  *ctmOutputFileFp    = NULL;
   FILE  *baudotOutputFileFp = NULL;
-  FILE  *textOutputFileFp   = NULL;
-  FILE  *text_input_file_fp = NULL;
+  FILE  *textOutputFileFp   = stdout;
+  FILE  *text_input_file_fp = stdin;
   
   const char* ctmInputFileName     = NULL;
   const char* baudotInputFileName  = NULL;
@@ -224,17 +222,25 @@ int main(int argc, const char** argv)
   const char* baudotOutputFileName = NULL;
   const char* textOutputFileName   = NULL;
   const char* text_input_filename  = NULL;
+  const char* audio_device_name    = SIO_DEVANY;
   
 #ifdef PCAUDIO /* only if real-time audio I/O is desired */
-  audio_caps_t audio_caps = { 8000, 16, STEREO };
-  UShortint    defaultVolume=0;
+  struct sio_hdl *audio_hdl = NULL;
+  struct sio_par audio_params; 
+
+  sio_initpar(&audio_params);
+  audio_params.rate = 8000;
+  audio_params.bits = 16;
+  audio_params.bps = 2;
+  audio_params.le = SIO_LE_NATIVE;
+  audio_params.rchan = 1;
+  audio_params.pchan = 1;
+  audio_params.appbufsz = LENGTH_TONE_VEC;
   
-  ctmReadFromFile    = false; /* In case of real-time audio-I/O, all    */
-  baudotReadFromFile = false; /* signals are NOT read from and written  */
-  ctmWriteToFile     = false; /* to files by default. This might change */
-  baudotWriteToFile  = false; /* if the user specifies filenames.       */
+  /* for over/underrun testing. */
+  //audio_params.xrun = SIO_ERROR;
+
 #endif
-  
   
   writeHead();
   
@@ -352,6 +358,12 @@ int main(int argc, const char** argv)
       errorMsg(argv[0]);
     }
 
+  /* if any CTM files were specified, do not use the audio device. */
+  if (ctmReadFromFile || ctmWriteToFile)
+  {
+    ctm_audio_dev_mode = false;
+  }
+
   /* check whether all neccessary filenames are specified */
   if (ctmReadFromFile && (ctmInputFileName==NULL))
     {
@@ -400,14 +412,39 @@ int main(int argc, const char** argv)
     text_input_file_fp = open_input_file_or_stdin(text_input_filename);
   }
 #ifdef PCAUDIO /* if desired, open audio device for duplex i/o */
-  fprintf(stderr, "opening audio device for duplex i/o...\n");
-  if (generic_audio_init (&audio_caps, AUDIO_DUPLEX))
+  if (ctm_audio_dev_mode)
+  {
+    /* open in blocking I/O mode, as that appears to be what the original 3GPP code expects in its processing loop. */
+    fprintf(stderr, "opening audio device for duplex i/o...\n");
+    audio_hdl = sio_open(audio_device_name, SIO_PLAY | SIO_REC, 0);
+    if (audio_hdl == NULL)
+      {
+        fprintf(stderr, "unable to open audio device \"%s\" for duplex i/o\n", audio_device_name);
+        exit(1);
+      }
+
+    /* attempt to set the device parameters. */
+    if (sio_setpar(audio_hdl, &audio_params) == 0)
     {
-      fprintf(stderr, "unable to open audio device for duplex i/o\n");
+      fprintf(stderr, "unable to set device parameters on audio device \"%s\"\n", audio_device_name);
       exit(1);
     }
-  defaultVolume=generic_audio_get_playback_volume();
-  generic_audio_set_playback_volume (PLAYBACK_VOLUME);
+
+    /* check to see that the device parameters were actually set up correctly. Not all devices may support the required parameters. */
+    struct sio_par dev_params;
+    if (sio_getpar(audio_hdl, &dev_params) == 0)
+    {
+      fprintf(stderr, "unable to get device parameters on audio device \"%s\"\n", audio_device_name);
+      exit(1);
+    }
+
+    else if ((audio_params.rate != dev_params.rate) || (audio_params.bits != dev_params.bits) || (audio_params.rchan != dev_params.rchan) || (audio_params.pchan != dev_params.pchan) || (audio_params.appbufsz != dev_params.appbufsz))
+
+    {
+      fprintf(stderr, "unable to set the correct parameters on audio device \"%s\"\n", audio_device_name);
+      exit(1);
+    } 
+  }
 #endif
   
   /* set up transmitter & receiver */
@@ -422,34 +459,71 @@ int main(int argc, const char** argv)
   Shortint_fifo_init(&ctmToBaudotFifoState,  4000);
   Shortint_fifo_init(&baudotToCtmFifoState,  3);
   
+  /* zero all the I/O buffers */
+  for(cnt=0;cnt<LENGTH_TONE_VEC;cnt++)
+  {
+    ctm_input_buffer[cnt] = 0;
+    baudot_input_buffer[cnt] = 0;
+    ctm_output_buffer[cnt] = 0;
+    baudot_output_buffer[cnt] = 0;
+  }
+
   if (numSamplesToProcess < maxULongint)
     fprintf(stderr, "number of samples to process: %u\n\n", numSamplesToProcess);
   
+#ifdef PCAUDIO
+  if (ctm_audio_dev_mode)
+  {
+    fprintf(stderr, "starting audio device \"%s\"...\n", audio_device_name);
+    if(sio_start(audio_hdl) == 0)
+    {
+      fprintf(stderr, "unable to start audio device \"%s\".\n", audio_device_name);
+    }
+
+    if(sio_setvol(audio_hdl, SIO_MAXVOL) == 0)
+    {
+      fprintf(stderr, "unable to set audio volume on device \"%s\".\n", audio_device_name);
+    }
+
+    /* we have to write to the output buffer first or reading will block indefinitely. */
+    for(cnt=0;cnt<2880/LENGTH_TONE_VEC;cnt++)
+      sio_write(audio_hdl, ctm_output_buffer, LENGTH_TONE_VEC);
+  } 
+#endif
+
+  if (disableNegotiation)
+    ctmFromFarEndDetected = true;
+
   /**************************************************************/
   /* Main processing loop                                       */
   /**************************************************************/
 
-  if (disableNegotiation)
-    ctmFromFarEndDetected = true;
-  
   do
     {
 #ifdef PCAUDIO /* read samples from audio-I/O, if desired */
-      generic_audio_get_samples (LENGTH_TONE_VEC, 
-                                 inputSignalBufferLeft, 
-                                 inputSignalBufferRight, NULL);
+      if (ctm_audio_dev_mode)
+      {
+        /* ctm_input_buffer == CTM input samples */
+        size_t bytes_read = 0;
+
+        /* block until we have enough input samples. */
+        while (bytes_read < LENGTH_TONE_VEC)
+        {
+          bytes_read += sio_read(audio_hdl, ctm_input_buffer + bytes_read, LENGTH_TONE_VEC);
+        }
+      }
 #endif
       
       /* Read next frame of input samples from files */
       if (baudotReadFromFile)
       {
-        if(fread(inputSignalBufferLeft, sizeof(Shortint), 
+        if(fread(baudot_input_buffer, sizeof(Shortint), 
                  LENGTH_TONE_VEC, baudotInputFileFp) < LENGTH_TONE_VEC)
           {
             /* if EOF is reached, use buffer with zeros instead */
             baudotEOF = true;
             for (cnt=0; cnt<LENGTH_TONE_VEC; cnt++)
-              inputSignalBufferLeft[cnt]=0;
+              baudot_input_buffer[cnt]=0;
           }
 
 #ifdef LSBFIRST
@@ -458,7 +532,7 @@ int main(int argc, const char** argv)
                 /* The test pattern baudot PCM files are in big-endian. If we are on a little-endian machine, we will need to swap the bytes */
                 for (cnt=0; cnt<LENGTH_TONE_VEC; cnt++)
                 {
-                        inputSignalBufferLeft[cnt] = swap16(inputSignalBufferLeft[cnt]);
+                        baudot_input_buffer[cnt] = swap16(baudot_input_buffer[cnt]);
                 }
         }
 #endif
@@ -466,13 +540,13 @@ int main(int argc, const char** argv)
       
       if (ctmReadFromFile)
       {
-        if(fread(inputSignalBufferRight, sizeof(Shortint), 
+        if(fread(ctm_input_buffer, sizeof(Shortint), 
                  LENGTH_TONE_VEC, ctmInputFileFp) < LENGTH_TONE_VEC)
           {
             /* if EOF is reached, use buffer with zeros instead */
             ctmEOF = true;
             for (cnt=0; cnt<LENGTH_TONE_VEC; cnt++)
-              inputSignalBufferRight[cnt]=0;
+              ctm_input_buffer[cnt]=0;
           }
 
 #ifdef LSBFIRST
@@ -481,7 +555,7 @@ int main(int argc, const char** argv)
                 /* The test pattern baudot PCM files are in big-endian. If we are on a little-endian machine, we will need to swap the bytes */
                 for (cnt=0; cnt<LENGTH_TONE_VEC; cnt++)
                {
-                        inputSignalBufferRight[cnt] = swap16(inputSignalBufferRight[cnt]);
+                        ctm_input_buffer[cnt] = swap16(ctm_input_buffer[cnt]);
                 }
         }
 #endif
@@ -491,10 +565,10 @@ int main(int argc, const char** argv)
       /* input signal in order to get rid of the echoes from the PSTN side */
       if (numBaudotBitsStillToModulate>0)
         for (cnt=0; cnt<LENGTH_TONE_VEC; cnt++)
-          inputSignalBufferLeft[cnt] = 0;
+          baudot_input_buffer[cnt] = 0;
       
       /* Run the Baudot demodulator */
-      baudot_tonedemod(inputSignalBufferLeft, LENGTH_TONE_VEC, 
+      baudot_tonedemod(baudot_input_buffer, LENGTH_TONE_VEC, 
                        &baudotOutTTYCodeFifoState, &baudot_tonedemod_state);
       /* Adjust the Mode of the modulator according to the demodulator */
       baudot_tonemod_state.inFigureMode = baudot_tonedemod_state.inFigureMode;
@@ -542,7 +616,7 @@ int main(int argc, const char** argv)
 
       /* Run the CTM receiver */
       
-      Shortint_fifo_push(&signalFifoState,inputSignalBufferRight, 
+      Shortint_fifo_push(&signalFifoState,ctm_input_buffer, 
                          LENGTH_TONE_VEC);
       
       ctm_receiver(&signalFifoState, &ctmOutTTYCodeFifoState, 
@@ -624,7 +698,7 @@ int main(int argc, const char** argv)
           else
             ttyCode = -1;
           
-          baudot_tonemod(ttyCode, txToneVecLeft, LENGTH_TONE_VEC,
+          baudot_tonemod(ttyCode, baudot_output_buffer, LENGTH_TONE_VEC,
                          &numBaudotBitsStillToModulate,
                          &baudot_tonemod_state);
           /* Adjust the Mode of the demodulator according to the modulator */
@@ -641,10 +715,10 @@ int main(int argc, const char** argv)
           /*     or set them to zero, if bypassing is prohibited */
           if (!disableBypass)
             for (cnt=0; cnt<LENGTH_TONE_VEC; cnt++)
-              txToneVecLeft[cnt] = inputSignalBufferRight[cnt];
+              baudot_output_buffer[cnt] = ctm_input_buffer[cnt];
           else
             for (cnt=0; cnt<LENGTH_TONE_VEC; cnt++)
-              txToneVecLeft[cnt] = 0;
+              baudot_output_buffer[cnt] = 0;
           cntFramesSinceLastBypassFromCTM = 0;
         }
       
@@ -741,7 +815,7 @@ int main(int argc, const char** argv)
           else
             ucsCode = 0x0016;
           
-          ctm_transmitter(ucsCode, txToneVecRight, &tx_state, 
+          ctm_transmitter(ucsCode, ctm_output_buffer, &tx_state, 
                           &numCTMBitsStillToModulate, sineOutput);
           
           ctmTransmitterIsIdle    
@@ -760,12 +834,12 @@ int main(int argc, const char** argv)
           if ((!syncOnBaudot && 
                (baudot_tonedemod_state.cntBitsActualChar>0)) || disableBypass)
             for (cnt=0; cnt<LENGTH_TONE_VEC; cnt++)
-              txToneVecRight[cnt] = 0;
+              ctm_output_buffer[cnt] = 0;
           else
             {
               /* Bypass audio samples. */
               for (cnt=0; cnt<LENGTH_TONE_VEC; cnt++)
-                txToneVecRight[cnt] = inputSignalBufferLeft[cnt];
+                ctm_output_buffer[cnt] = 0; //baudot_input_buffer[cnt];
               syncOnBaudot = true;
             }
           
@@ -778,11 +852,6 @@ int main(int argc, const char** argv)
       if (cntFramesSinceBurstInit<maxShortint)
         cntFramesSinceBurstInit++;
       
-#ifdef PCAUDIO /* write samples to audio-I/O, if desired */
-      generic_audio_put_samples(LENGTH_TONE_VEC,
-                                txToneVecLeft, txToneVecRight, NULL); 
-#endif
-      
       if (baudotWriteToFile)
       {
 #ifdef LSBFIRST
@@ -791,11 +860,11 @@ int main(int argc, const char** argv)
         {
           for (cnt=0; cnt<LENGTH_TONE_VEC; cnt++)
           {
-                  txToneVecLeft[cnt] = swap16(txToneVecLeft[cnt]);
+                  baudot_output_buffer[cnt] = swap16(baudot_output_buffer[cnt]);
           }
         }
 #endif
-        if (fwrite(txToneVecLeft, sizeof(Shortint), 
+        if (fwrite(baudot_output_buffer, sizeof(Shortint), 
                    LENGTH_TONE_VEC, baudotOutputFileFp) < LENGTH_TONE_VEC)
           {
             fprintf(stderr, "error while writing to '%s'\n", 
@@ -804,6 +873,20 @@ int main(int argc, const char** argv)
           }
       }
       
+#ifdef PCAUDIO /* write samples to audio-I/O, if desired */
+      if (ctm_audio_dev_mode)
+      {
+        /* ctm_output_buffer == CTM output samples */
+        size_t bytes_written = 0;
+
+        /* block until we have enough input samples. */
+        while (bytes_written < LENGTH_TONE_VEC)
+        {
+          bytes_written += sio_write(audio_hdl, ctm_output_buffer + bytes_written, LENGTH_TONE_VEC);
+        }
+      }
+#endif
+
       if (ctmWriteToFile)
       {
 #ifdef LSBFIRST
@@ -812,11 +895,11 @@ int main(int argc, const char** argv)
         {
           for (cnt=0; cnt<LENGTH_TONE_VEC; cnt++)
           {
-                  txToneVecRight[cnt] = swap16(txToneVecRight[cnt]);
+                  ctm_output_buffer[cnt] = swap16(ctm_output_buffer[cnt]);
           }
         }
 #endif
-        if (fwrite(txToneVecRight, sizeof(Shortint), 
+        if (fwrite(ctm_output_buffer, sizeof(Shortint), 
                    LENGTH_TONE_VEC, ctmOutputFileFp) < LENGTH_TONE_VEC)
           {
             fprintf(stderr, "error while writing to '%s'\n", 
@@ -847,6 +930,13 @@ int main(int argc, const char** argv)
   
   if (writeToTextFile)
     fclose(textOutputFileFp);
-  
+
+#ifdef PCAUDIO
+  if (ctm_audio_dev_mode)
+  {
+    sio_close(audio_hdl);
+  }
+#endif
+
   return 0;
 }

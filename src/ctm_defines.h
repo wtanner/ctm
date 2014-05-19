@@ -26,8 +26,8 @@
 
 /* The following constant determines whether the signal processing takes */
 /* place sample-by-sample or frame-by-frame (160 samples per frame)      */
-//#define LENGTH_TONE_VEC  160  /* signal frame size                         */
-#define LENGTH_TONE_VEC      1  /* signal frame size                         */
+#define LENGTH_TONE_VEC  160  /* signal frame size                         */
+//#define LENGTH_TONE_VEC      1  /* signal frame size                         */
 
 /* Number of bits that are processed during each call of the main loop   */
 #define LENGTH_TX_BITS  MAX(2, 2*LENGTH_TONE_VEC/SYMB_LEN) 

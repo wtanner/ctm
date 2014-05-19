@@ -46,7 +46,7 @@ CFLAGS = -O6 -Wall  -I.
 #
 # linker flags
 #
-LDFLAGS  = 	-lm  $(LLDFLAGS)   
+LDFLAGS  = 	-lm -lsndio $(LLDFLAGS)   
 
 
 #
