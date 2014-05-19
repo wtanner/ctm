@@ -49,6 +49,13 @@
 #include <string.h>
 #include <err.h>
 
+#include <ctype.h>      /* toupper() */
+#include <termios.h>
+
+#ifdef PC
+//#define PCAUDIO
+#endif
+
 #ifdef __OpenBSD__
 #include <sys/types.h>
 #include <sndio.h>
