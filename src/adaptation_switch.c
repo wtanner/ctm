@@ -47,6 +47,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <err.h>
 
 #ifndef PC
 #include <ctype.h>      /* toupper() */
@@ -109,8 +110,7 @@ FILE* open_input_file_or_stdin(const char *filename)
     file_fd = fopen(filename, "r");
     if (file_fd == (FILE*)NULL)
     {
-      fprintf(stderr, "can't open input file '%s'\n", filename);
-      exit(1);
+      errx(1, "can't open input file '%s'\n", filename);
     }
   }
 
@@ -129,8 +129,7 @@ FILE* open_output_file_or_stdout(const char *filename)
     file_fd = fopen(filename, "w");
     if (file_fd == (FILE*)NULL)
     {
-      fprintf(stderr, "can't open output file '%s'\n", filename);
-      exit(1);
+      errx(1, "can't open output file '%s'\n", filename);
     }
   }
 
@@ -419,30 +418,26 @@ int main(int argc, const char** argv)
     audio_hdl = sio_open(audio_device_name, SIO_PLAY | SIO_REC, 0);
     if (audio_hdl == NULL)
       {
-        fprintf(stderr, "unable to open audio device \"%s\" for duplex i/o\n", audio_device_name);
-        exit(1);
+        errx(1, "unable to open audio device \"%s\" for duplex i/o\n", audio_device_name);
       }
 
     /* attempt to set the device parameters. */
     if (sio_setpar(audio_hdl, &audio_params) == 0)
     {
-      fprintf(stderr, "unable to set device parameters on audio device \"%s\"\n", audio_device_name);
-      exit(1);
+      errx(1, "unable to set device parameters on audio device \"%s\"\n", audio_device_name);
     }
 
     /* check to see that the device parameters were actually set up correctly. Not all devices may support the required parameters. */
     struct sio_par dev_params;
     if (sio_getpar(audio_hdl, &dev_params) == 0)
     {
-      fprintf(stderr, "unable to get device parameters on audio device \"%s\"\n", audio_device_name);
-      exit(1);
+      errx(1, "unable to get device parameters on audio device \"%s\"\n", audio_device_name);
     }
 
     else if ((audio_params.rate != dev_params.rate) || (audio_params.bits != dev_params.bits) || (audio_params.rchan != dev_params.rchan) || (audio_params.pchan != dev_params.pchan) || (audio_params.appbufsz != dev_params.appbufsz))
 
     {
-      fprintf(stderr, "unable to set the correct parameters on audio device \"%s\"\n", audio_device_name);
-      exit(1);
+      errx(1, "unable to set the correct parameters on audio device \"%s\"\n", audio_device_name);
     } 
   }
 #endif
@@ -477,12 +472,12 @@ int main(int argc, const char** argv)
     fprintf(stderr, "starting audio device \"%s\"...\n", audio_device_name);
     if(sio_start(audio_hdl) == 0)
     {
-      fprintf(stderr, "unable to start audio device \"%s\".\n", audio_device_name);
+      errx(1, "unable to start audio device \"%s\".\n", audio_device_name);
     }
 
     if(sio_setvol(audio_hdl, SIO_MAXVOL) == 0)
     {
-      fprintf(stderr, "unable to set audio volume on device \"%s\".\n", audio_device_name);
+      errx(1, "unable to set audio volume on device \"%s\".\n", audio_device_name);
     }
 
     /* we have to write to the output buffer first or reading will block indefinitely. */
@@ -867,9 +862,8 @@ int main(int argc, const char** argv)
         if (fwrite(baudot_output_buffer, sizeof(Shortint), 
                    LENGTH_TONE_VEC, baudotOutputFileFp) < LENGTH_TONE_VEC)
           {
-            fprintf(stderr, "error while writing to '%s'\n", 
+            errx(1, "error while writing to '%s'\n", 
                     baudotOutputFileName);
-            exit(1);
           }
       }
       
@@ -902,9 +896,8 @@ int main(int argc, const char** argv)
         if (fwrite(ctm_output_buffer, sizeof(Shortint), 
                    LENGTH_TONE_VEC, ctmOutputFileFp) < LENGTH_TONE_VEC)
           {
-            fprintf(stderr, "error while writing to '%s'\n", 
+            errx(1, "error while writing to '%s'\n", 
                     ctmOutputFileName);
-            exit(1);
           }
       }
       
