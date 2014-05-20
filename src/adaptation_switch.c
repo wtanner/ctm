@@ -35,6 +35,7 @@
 *
 */
 
+#include "ctm.h"
 #include "ctm_defines.h"
 #include "ctm_transmitter.h"
 #include "ctm_receiver.h"
@@ -92,53 +93,28 @@ void errorMsg(const char* filename)
   exit(1);
 }
 
-FILE* open_input_file_or_stdin(const char *filename)
+int
+open_file_or_stdio(const char *filename, int flags)
 {
-  FILE *file_fd;
+  int file_fd;
   if (!strncmp(filename, "-", 1))
   {
-    file_fd = stdin;
-  }
+    if (flags & O_WRONLY)
+      file_fd = STDOUT_FILENO;
+    else if (flags & O_RDONLY)
+      file_fd = STDIN_FILENO;
+    else
+        errx(1, "invalid read/write flag.");
+    }
+
   else
   {
-    file_fd = fopen(filename, "r");
-    if (file_fd == (FILE*)NULL)
-    {
-      errx(1, "can't open input file '%s'\n", filename);
+    if ((file_fd = open(filename, flags)) == -1)
+      err(1, "%s", filename);
     }
-  }
 
   return file_fd;
 }
-
-FILE* open_output_file_or_stdout(const char *filename)
-{
-  FILE *file_fd;
-  if (!strncmp(filename, "-", 1))
-  {
-    file_fd = stdout;
-  }
-  else
-  {
-    file_fd = fopen(filename, "w");
-    if (file_fd == (FILE*)NULL)
-    {
-      errx(1, "can't open output file '%s'\n", filename);
-    }
-  }
-
-  return file_fd;
-}
-
-struct ctm_state {
-    Shortint     numCTMBitsStillToModulate;
-    Shortint     numBaudotBitsStillToModulate;
-    Shortint     cntFramesSinceBurstInit;
-    Shortint     cntFramesSinceLastBypassFromCTM;
-    Shortint     cntFramesSinceEnquiryDetected;
-    Shortint     cntTransmittedEnquiries;
-    Shortint     cntHangoverFramesForMuteBaudot;
-};
 
 /***********************************************************************/
 
@@ -147,274 +123,100 @@ int main(int argc, const char** argv)
   Shortint     cnt;
   int          optindex;
 
-  Shortint     numCTMBitsStillToModulate       = 0;
-  Shortint     numBaudotBitsStillToModulate    = 0;
-  Shortint     cntFramesSinceBurstInit         = 0;
-  Shortint     cntFramesSinceLastBypassFromCTM = 0;
-  Shortint     cntFramesSinceEnquiryDetected   = 0;
-  Shortint     cntTransmittedEnquiries         = 0;
-  Shortint     cntHangoverFramesForMuteBaudot  = 0;
-  
-  Shortint     ttyCode                         = 0;
-  UShortint    ucsCode                         = 0;
-  
-  ULongint     cntProcessedSamples             = 0;
-  ULongint     numSamplesToProcess             = maxULongint;
-  
-  char         character;
-      
-  Shortint     baudot_output_buffer[LENGTH_TONE_VEC];
-  Shortint     ctm_output_buffer[LENGTH_TONE_VEC];
-
-  Bool         sineOutput                = false;
-  Bool         writeToTextFile           = false;
-  Bool         read_from_text_file       = false;
-  
-  Bool         ctmReadFromFile           = false;
-  Bool         baudotReadFromFile        = false;
-  Bool         ctmWriteToFile            = false;
-  Bool         baudotWriteToFile         = false;
-  
-  Bool         ctmFromFarEndDetected     = false;
-  Bool         ctmCharacterTransmitted   = false;
-  Bool         enquiryFromFarEndDetected = false;
-  Bool         syncOnBaudot              = true;
-  Bool         ctmTransmitterIsIdle      = true;
-  Bool         baudotEOF                 = false;
-  Bool         ctmEOF                    = false;
-  Bool         disableNegotiation        = false;
-  Bool         disableBypass             = false;
-  Bool         earlyMutingRequired       = false;
-  Bool         baudotAlreadyReceived     = false;
-  Bool         actualBaudotCharDetected  = false;
-
-  Bool         compat_mode               = false;
-  Bool         ctm_audio_dev_mode        = true; /* by default, we will use the "default" system audio device for CTM I/O. */
-  
-  tx_state_t   tx_state;
-  rx_state_t   rx_state;
-  
-  /* State variables for the Baudot demodulator and modulator,respectively. */
-  
-  baudot_tonedemod_state_t baudot_tonedemod_state;
-  baudot_tonemod_state_t   baudot_tonemod_state;
-  
-  /* Define fifo state variables */
-  
-  Shortint      baudotOutTTYCodeFifoLength = 50;
-  fifo_state_t  baudotOutTTYCodeFifoState;
-  fifo_state_t  signalFifoState;
-  fifo_state_t  ctmOutTTYCodeFifoState;
-  fifo_state_t  baudotToCtmFifoState;
-  fifo_state_t  ctmToBaudotFifoState;
-
-  Shortint   baudot_input_buffer[LENGTH_TONE_VEC];
-  Shortint   ctm_input_buffer[LENGTH_TONE_VEC];
-
-  /* Define file variables */
-  
-  FILE  *ctmInputFileFp     = NULL;
-  FILE  *baudotInputFileFp  = NULL;
-  FILE  *ctmOutputFileFp    = NULL;
-  FILE  *baudotOutputFileFp = NULL;
-  FILE  *textOutputFileFp   = stdout;
-  FILE  *text_input_file_fp = stdin;
-  
-  const char* ctmInputFileName     = NULL;
-  const char* baudotInputFileName  = NULL;
-  const char* ctmOutputFileName    = NULL;
-  const char* baudotOutputFileName = NULL;
-  const char* textOutputFileName   = NULL;
-  const char* text_input_filename  = NULL;
-  const char* audio_device_name    = SIO_DEVANY;
-  
-#ifdef PCAUDIO /* only if real-time audio I/O is desired */
-  struct sio_hdl *audio_hdl = NULL;
-  struct sio_par audio_params; 
-
-  sio_initpar(&audio_params);
-  audio_params.rate = 8000;
-  audio_params.bits = 16;
-  audio_params.bps = 2;
-  audio_params.le = SIO_LE_NATIVE;
-  audio_params.rchan = 1;
-  audio_params.pchan = 1;
-  audio_params.appbufsz = LENGTH_TONE_VEC;
-  
-  /* for over/underrun testing. */
-  //audio_params.xrun = SIO_ERROR;
-
-#endif
+  /* command-line argument flags and variables */
+  int ctm_input_fd;
+  int ctm_output_fd;
+  int user_input_fd;
+  int user_output_fd;
+  int compat_flag;
+  int baudot_flag;
+  int negotiation_flag;
+  int ctm_file_mode_flag;
+  int audio_mode_flag;
+  ctm_user_input_mode user_input_mode;
+  ctm_output_mode ctm_mode;
   
   writeHead();
-  
-  /* parse the argument line */
-  for (cnt=1; cnt<argc; cnt++)
-    {
-      optindex = get_option(argc, argv, cnt, 11, "-h", 
-                            "-ctmin", "-ctmout", "-baudotin", "-baudotout", 
-                            "-textout", "-numsamples", 
-                            "-nonegotiation", "-nobypass", "-compat", "-textin");
-      if (optindex<0)
+
+  /* set default behavior */
+  user_input_fd = stdin;
+  user_output_fd = stdout;
+  ctm_input_fd = NULL;
+  ctm_output_fd = NULL;
+  compat_flag = 0;
+  baudot_flag = 0;
+  negotiation_flag = 0;
+  ctm_file_mode_flag = 0;
+  audio_mode_flag = 1;
+
+  int ch;
+  while ((ch = getopt(argc, argv, "cbni:o:f:I:O:")) != -1) {
+    switch (ch) {
+      case 'c':
+        compat_flag = 1;
         break;
-      
-      switch (optindex)
-        {
-        case 0:
-          errorMsg(argv[0]);
-          break;
-        case 1:
-          ctmReadFromFile = true;
-          cnt++;
-          ctmInputFileName = get_argument(argc, argv, cnt);
-          if (ctmInputFileName==(char*)NULL)
-            {
-              fprintf(stderr, "\nerror: undetermined ctm input filename!\n");
-              errorMsg(argv[0]);
-            }
-          break;
-        case 2:
-          ctmWriteToFile = true;
-          cnt++;
-          ctmOutputFileName = get_argument(argc, argv, cnt);
-          if (ctmOutputFileName==(char*)NULL)
-            {
-              fprintf(stderr, "\nerror: undetermined ctm output filename!\n");
-              errorMsg(argv[0]);
-            }
-          break;
-        case 3:
-          baudotReadFromFile = true;
-          cnt++;
-          baudotInputFileName = get_argument(argc, argv, cnt);
-          if (baudotInputFileName==(char*)NULL)
-            {
-              fprintf(stderr, "\nerror: undetermined baudot input text filename!\n");
-              errorMsg(argv[0]);
-            }
-          break;
-        case 4: 
-          baudotWriteToFile = true;
-          cnt++;
-          baudotOutputFileName = get_argument(argc, argv, cnt);
-          if (baudotOutputFileName==(char*)NULL)
-            {
-              fprintf(stderr, "\nerror: undetermined baudot output filename!\n");
-              errorMsg(argv[0]);
-            }
-          break;
-        case 5:
-          cnt++;
-          writeToTextFile    = true;
-          textOutputFileName = get_argument(argc, argv, cnt);
-          if (textOutputFileName==(char*)NULL)
-            {
-              fprintf(stderr, "\nerror: undetermined text output filename!\n");
-              errorMsg(argv[0]);
-            }
-          break;
-        case 6:
-          cnt++;
-          if (get_argument(argc, argv, cnt)==(char*)NULL)
-            {
-              fprintf(stderr, "\nerror: number of samples to process not specified!\n");
-              errorMsg(argv[0]);
-            }
-          numSamplesToProcess = atol(get_argument(argc, argv, cnt));
-          break;
-        case 7:
-          disableNegotiation = true;
-          break;
-        case 8:
-          disableBypass = true;
-          break;
-        case 9:
-          compat_mode = true;
-          break;
-        case 10:
-          cnt++;
-          read_from_text_file = true;
-
-          if (baudotReadFromFile)
-          {
-            /* mutually exclusive inputs were specified. */
-            warnx("baudot input and text input were both specified. Ignoring baudot input.");
-            baudotReadFromFile = false;
-          }
-
-          text_input_filename = get_argument(argc, argv, cnt);
-          if (text_input_filename==(char*)NULL)
-          {
-              fprintf(stderr, "\nerror: undetermined text input filename!\n");
-              errorMsg(argv[0]);
-          }
-          break;
-        default:
-          fprintf(stderr, "\nerror: unknown option: %s\n", argv[cnt]);
-          errorMsg(argv[0]);
-        }
+      case 'b':
+        baudot_flag = 1;
+        break;
+      case 'n':
+        negotiation_flag = 1;
+        break;
+      case 'I':
+        ctm_file_mode_flag = 1;
+        audio_mode_flag = 0;
+        ctm_input_fd = open_file_or_stdio(optarg);
+        break;
+      case 'O':
+        ctm_file_mode_flag = 1;
+        audio_mode_flag = 0;
+        ctm_output_fd = open_file_or_stdio(optarg);
+        break;
+      case 'i':
+        user_input_fd = open_file_or_stdio(optarg);
+        break;
+      case 'o':
+        user_output_fd = open_file_or_stdio(optarg);
+        break;
+      default:
+        usage();
+        /* NOTREACHED */
     }
-
-  /* check if there are still unconsumed (i.e. invalid) arguments */
-  if (get_argument(argc, argv, cnt)!=(char*)NULL)
-    {
-      fprintf(stderr, "Too much or invalid arguments!\n\n");
-      errorMsg(argv[0]);
-    }
-
-  /* if any CTM files were specified, do not use the audio device. */
-  if (ctmReadFromFile || ctmWriteToFile)
-  {
-    ctm_audio_dev_mode = false;
   }
+  argc -= optind;
+  argv += optind;
 
-  /* check whether all neccessary filenames are specified */
-  if (ctmReadFromFile && (ctmInputFileName==NULL))
-    {
-      fprintf(stderr, "CTM input filename not specified!\n\n");
-      errorMsg(argv[0]);
-    }
-  if (baudotReadFromFile && (baudotInputFileName==NULL))
-    {
-      fprintf(stderr, "Baudot Tones input filename not specified!\n\n");
-      errorMsg(argv[0]);
-    }
-  if (ctmWriteToFile && (ctmOutputFileName==NULL))
-    {
-      fprintf(stderr, "CTM output filename not specified!\n\n");
-      errorMsg(argv[0]);
-    }
-  if (baudotWriteToFile && (baudotOutputFileName==NULL))
-    {
-      fprintf(stderr, "Baudot Tones output filename not specified!\n\n");
-      errorMsg(argv[0]);
-    }
-  
-  /* open all required files for signal input and output */
-  if (ctmReadFromFile)
-    {
-      ctmInputFileFp = open_input_file_or_stdin(ctmInputFileName);
-    }
-  if (ctmWriteToFile)
-    {
-      ctmOutputFileFp = open_output_file_or_stdout(ctmOutputFileName);
-    }
-  if (baudotReadFromFile)
-    {
-      baudotInputFileFp = open_input_file_or_stdin(baudotInputFileName);
-    }
-  if (baudotWriteToFile)
-    {
-      baudotOutputFileFp = open_output_file_or_stdout(baudotOutputFileName);
-    }
-  if (writeToTextFile)
-    {
-      textOutputFileFp = open_output_file_or_stdout(textOutputFileName);
-    }
-  if (read_from_text_file)
-  {
-    text_input_file_fp = open_input_file_or_stdin(text_input_filename);
+  /* check for sane argument combinations */
+  if (audio_mode_flag == 1 && ctm_file_mode_flag == 1)
+    errx(1, "invalid arguments: if using audio mode, no CTM files can be specified.");
+
+  else if (ctm_file_mode_flag == 1 && (ctm_input_fd == NULL || ctm_output_fd == NULL))
+    errx(1, "invalid arguments: both CTM input and output files must be specified.");
+
+  else if (baudot_flag == 1 && (user_input_fd == NULL || user_output_fd == NULL))
+    errx(1, "invalid arguments: both baudot input and output files must be specified in baudot mode.");
+
+  else if (compat_flag == 1 && ctm_file_mode_flags == 0 && baudot_flag == 0)
+    errx(1, "invalid arguments: compatibility mode is used only with baudot and/or CTM file modes.");
+
+  /* select the user input mode and CTM mode based on the input arguments. */
+  if (ctm_file_mode_flag == 1) {
+    if (compat_flag == 0)
+      ctm_mode = CTM_FILE;
+    else
+      ctm_mode = CTM_fILE_COMPAT;
   }
+  else
+    ctm_mode = CTM_AUDIO;
+
+  if (baudot_flag == 1) {
+    if (compat_flag == 0)
+      user_input_mode = CTM_BAUDOT_IN;
+    else
+      user_input_mode = CTM_BAUDOT_IN_COMPAT;
+  }
+  else
+    user_input_mode = CTM_TEXT_IN;
+
 #ifdef PCAUDIO /* if desired, open audio device for duplex i/o */
   if (ctm_audio_dev_mode)
   {
@@ -459,15 +261,6 @@ int main(int argc, const char** argv)
   Shortint_fifo_init(&ctmToBaudotFifoState,  4000);
   Shortint_fifo_init(&baudotToCtmFifoState,  3);
   
-  /* zero all the I/O buffers */
-  for(cnt=0;cnt<LENGTH_TONE_VEC;cnt++)
-  {
-    ctm_input_buffer[cnt] = 0;
-    baudot_input_buffer[cnt] = 0;
-    ctm_output_buffer[cnt] = 0;
-    baudot_output_buffer[cnt] = 0;
-  }
-
   if (numSamplesToProcess < maxULongint)
     fprintf(stderr, "number of samples to process: %u\n\n", numSamplesToProcess);
   
@@ -939,5 +732,5 @@ int main(int argc, const char** argv)
   }
 #endif
 
-  return 0;
+  exit(0);
 }

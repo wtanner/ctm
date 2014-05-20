@@ -1,6 +1,16 @@
 #ifndef ctm_h
 #define ctm_h
 
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include <err.h>
+
+#include "typedefs.h"
+#include "ctm_transmitter.h"
+#include "ctm_receiver.h"
+#include "baudot_functions.h"
+
 struct ctm_state {
     Shortint     numCTMBitsStillToModulate;
     Shortint     numBaudotBitsStillToModulate;
@@ -87,3 +97,40 @@ struct ctm_state {
     struct sio_par audio_params; 
 #endif
 };
+
+/*
+ * Enumerated types
+ */
+
+enum ctm_output_mode {
+  CTM_AUDIO,
+  CTM_FILE,
+  CTM_FILE_COMPAT
+};
+
+enum ctm_user_input_mode {
+  CTM_BAUDOT_IN,
+  CTM_BAUDOT_IN_COMPAT,
+  CTM_TEXT_IN
+};
+
+enum io_flag {
+  CTM_IO_IN,
+  CTM_IO_OUT
+};
+
+enum on_off {
+  ON,
+  OFF
+};
+
+/* 
+ * API functions
+*/
+
+/* The first char* name is used for audio devices, if that is the mode enabled. */
+void ctm_init(enum ctm_output_mode, enum ctm_user_input_mode, char *, char *, char *, char *);
+void ctm_set_negotiation(enum on_off);
+int ctm_start(void);
+
+#endif
