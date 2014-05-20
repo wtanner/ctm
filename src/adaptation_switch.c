@@ -129,6 +129,17 @@ FILE* open_output_file_or_stdout(const char *filename)
 
   return file_fd;
 }
+
+struct ctm_state {
+    Shortint     numCTMBitsStillToModulate;
+    Shortint     numBaudotBitsStillToModulate;
+    Shortint     cntFramesSinceBurstInit;
+    Shortint     cntFramesSinceLastBypassFromCTM;
+    Shortint     cntFramesSinceEnquiryDetected;
+    Shortint     cntTransmittedEnquiries;
+    Shortint     cntHangoverFramesForMuteBaudot;
+};
+
 /***********************************************************************/
 
 int main(int argc, const char** argv)
@@ -178,7 +189,7 @@ int main(int argc, const char** argv)
   Bool         actualBaudotCharDetected  = false;
 
   Bool         compat_mode               = false;
-  Bool         ctm_audio_dev_mode        = true; /* by default, we will use the default system audio device for CTM I/O. */
+  Bool         ctm_audio_dev_mode        = true; /* by default, we will use the "default" system audio device for CTM I/O. */
   
   tx_state_t   tx_state;
   rx_state_t   rx_state;
@@ -327,7 +338,7 @@ int main(int argc, const char** argv)
           if (baudotReadFromFile)
           {
             /* mutually exclusive inputs were specified. */
-            fprintf(stderr, "\nwarning: baudot input and text input were both specified. Ignoring baudot input.\n");
+            warnx("baudot input and text input were both specified. Ignoring baudot input.");
             baudotReadFromFile = false;
           }
 
@@ -475,8 +486,12 @@ int main(int argc, const char** argv)
     }
 
     /* we have to write to the output buffer first or reading will block indefinitely. */
-    for(cnt=0;cnt<2880/LENGTH_TONE_VEC;cnt++)
-      sio_write(audio_hdl, ctm_output_buffer, LENGTH_TONE_VEC);
+    /* debug */
+    for(cnt=0;cnt<LENGTH_TONE_VEC;cnt++)
+      ctm_output_buffer[cnt] = (short)rand();
+    for(cnt=0;cnt<10;cnt++)
+      sio_write(audio_hdl, ctm_output_buffer, LENGTH_TONE_VEC*sizeof(Shortint));
+    /* debug end */
   } 
 #endif
 
@@ -493,16 +508,15 @@ int main(int argc, const char** argv)
       if (ctm_audio_dev_mode)
       {
         /* ctm_input_buffer == CTM input samples */
-        size_t bytes_read = 0;
+        size_t bytes_left_to_read = LENGTH_TONE_VEC*sizeof(Shortint);
 
         /* block until we have enough input samples. */
-        while (bytes_read < LENGTH_TONE_VEC)
+        while (bytes_left_to_read > 0)
         {
-          bytes_read += sio_read(audio_hdl, ctm_input_buffer + bytes_read, LENGTH_TONE_VEC);
+          bytes_left_to_read -= sio_read(audio_hdl, ctm_input_buffer + bytes_left_to_read*sizeof(Shortint), bytes_left_to_read);
         }
       }
 #endif
-      
       /* Read next frame of input samples from files */
       if (baudotReadFromFile)
       {
@@ -539,7 +553,7 @@ int main(int argc, const char** argv)
           }
 
 #ifdef LSBFIRST
-        else if (compat_mode)
+        if (compat_mode)
         {
                 /* The test pattern baudot PCM files are in big-endian. If we are on a little-endian machine, we will need to swap the bytes */
                 for (cnt=0; cnt<LENGTH_TONE_VEC; cnt++)
@@ -828,7 +842,7 @@ int main(int argc, const char** argv)
             {
               /* Bypass audio samples. */
               for (cnt=0; cnt<LENGTH_TONE_VEC; cnt++)
-                ctm_output_buffer[cnt] = 0; //baudot_input_buffer[cnt];
+                ctm_output_buffer[cnt] = baudot_input_buffer[cnt];
               syncOnBaudot = true;
             }
           
@@ -865,12 +879,12 @@ int main(int argc, const char** argv)
       if (ctm_audio_dev_mode)
       {
         /* ctm_output_buffer == CTM output samples */
-        size_t bytes_written = 0;
+        size_t bytes_left_to_write = LENGTH_TONE_VEC*sizeof(Shortint);
 
         /* block until we have enough input samples. */
-        while (bytes_written < LENGTH_TONE_VEC)
+        while (bytes_left_to_write > 0)
         {
-          bytes_written += sio_write(audio_hdl, ctm_output_buffer + bytes_written, LENGTH_TONE_VEC);
+          bytes_left_to_write -= sio_write(audio_hdl, ctm_output_buffer + bytes_left_to_write*sizeof(Shortint), bytes_left_to_write);
         }
       }
 #endif
