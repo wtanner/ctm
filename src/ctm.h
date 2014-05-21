@@ -27,9 +27,6 @@ struct ctm_state {
   
     char         character;
       
-    Shortint     *baudot_output_buffer;
-    Shortint     *ctm_output_buffer;
-
     Bool         sineOutput;
     Bool         writeToTextFile;
     Bool         read_from_text_file;
@@ -62,7 +59,7 @@ struct ctm_state {
   
     baudot_tonedemod_state_t baudot_tonedemod_state;
     baudot_tonemod_state_t   baudot_tonemod_state;
-  
+
     /* Define fifo state variables */
   
     Shortint      baudotOutTTYCodeFifoLength;
@@ -74,6 +71,10 @@ struct ctm_state {
 
     Shortint   *baudot_input_buffer;
     Shortint   *ctm_input_buffer;
+    Shortint   *baudot_output_buffer;
+    Shortint   *ctm_output_buffer;
+
+    size_t     audio_buffer_size; /* in bytes */
 
     /* Define file variables */
     
@@ -120,13 +121,6 @@ enum io_flag {
 enum on_off {
   ON,
   OFF
-};
-
-enum ctm_fds {
-  CTM_INPUT_FD,
-  CTM_OUTPUT_FD,
-  USER_INPUT_FD,
-  USER_OUTPUT_FD
 };
 
 /* 

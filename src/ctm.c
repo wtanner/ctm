@@ -282,8 +282,11 @@ ctm_start(void)
           break;
         case 2:
           if (state->ctm_audio_dev_mode) {
-            if(sio_revents(state->audio_hdl, pfds[2]) & (POLLIN|POLLOUT)) {
-              /* process audio */
+            if(sio_revents(state->audio_hdl, pfds[2]) & (POLLIN)) {
+              /* process audio in */
+            }
+            if(sio_revents(state->audio_hdl, pfds[2]) & (POLLOUT)) {
+              /* process audio out */
             }
           }
           else
