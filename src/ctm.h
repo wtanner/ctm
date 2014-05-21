@@ -122,6 +122,13 @@ enum on_off {
   OFF
 };
 
+enum ctm_fds {
+  CTM_INPUT_FD,
+  CTM_OUTPUT_FD,
+  USER_INPUT_FD,
+  USER_OUTPUT_FD
+};
+
 /* 
  * API functions
 */

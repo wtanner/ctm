@@ -219,13 +219,6 @@ void setup_poll_fds(struct pollfd *pfds)
     nfds = 4;
 
   pfds = calloc(nfds, sizeof(struct pollfd));
-  pfds[0]->fd = state->
-    int ctmInputFileFp;
-    int baudotInputFileFp;
-    int ctmOutputFileFp;
-    int baudotOutputFileFp;
-    int textOutputFileFp;
-    int text_input_file_fp;
 
   pfds[0]->fd = state->userInputFileFp;
   pfds[1]->fd = state->userOutputFileFp;
@@ -233,7 +226,7 @@ void setup_poll_fds(struct pollfd *pfds)
   pfds[1]->events = POLLIN;
 
   if (state->ctm_audio_dev_mode) {
-    if (sio_pollfd(state->audio_hdl, pfds[2], POLLIN) != 1)
+    if (sio_pollfd(state->audio_hdl, pfds[2], POLLIN|POLLOUT) != 1)
       errx(1, "unable to setup audio device polling.");
   }
   else {
@@ -276,8 +269,33 @@ ctm_start(void)
     if (r_nfds == -1)
       err(1, NULL);
     
-    for (index=0; index < r_nfds; index++) {
-      if (pfds[index]->r_events & POLLIN) {
+    for (index=0; index < nfds; index++) {
+      
+      switch (index) {
+        case 0:
+          if (pfds[index]->r_events & (POLLIN))
+            /* handle user input */
+          break;
+        case 1:
+          if (pfds[index]->r_events & (POLLOUT))
+            /* handle user input */
+          break;
+        case 2:
+          if (state->ctm_audio_dev_mode) {
+            if(sio_revents(state->audio_hdl, pfds[2]) & (POLLIN|POLLOUT)) {
+              /* process audio */
+            }
+          }
+          else
+            /* process ctm input */
+          break;
+        case 3:
+          if (pfds[index]->r_events & (POLLIN|POLLOUT))
+            /* process ctm output */
+          break;
+        default:
+          errx(1, "invalid pollfd index.");
+          break;
       }
     }
   }
