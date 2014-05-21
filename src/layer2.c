@@ -81,13 +81,13 @@ void layer2_process_user_input(struct ctm_state *state)
 
   else {
     /* otherwise we are reading text input */
-    if (Shortint_fifo_check(&(state->baudotToCtmFifoState)) < state->baudotToCtmFifoStateLength)
+    if (Shortint_fifo_check(&(state->baudotOutTTYCodeFifoState)) < state->baudotOutTTYCodeFifoLength)
     {
-      if (read(state->userInputFileFp, &(state->input_char), 1) == -1)
+      if (read(state->userInputFileFp, &character, 1) == -1)
         err(1, NULL);
 
-      ucsCode = convertChar2UCScode(state->input_char);
-      Shortint_fifo_push(&(state->baudotToCtmFifoState), ucsCode, 1);
+      ttyCode = convertChar2ttyCode(character);
+      Shortint_fifo_push(&(state->baudotOutTTYCodeFifoState), ttyCode, 1);
     }
   }
 } 
@@ -157,19 +157,21 @@ void layer2_process_ctm_audio_in(struct ctm_state *state)
 
 void layer2_process_ctm_audio_out(struct ctm_state *state)
 {
+  layer2_process_ctm_out(state);
+
   if (sio_write(state->audio_hdl, state->ctm_input_buffer, state->audio_buffer_size) < state->audio_buffer_size) {
     warnx(1, "overrun in audio output to device.");
   }
-
-  layer2_process_ctm_out(state);
 }
 
 void layer2_process_ctm_file_input(struct ctm_state *state)
 {
+  layer2_process_ctm_in(state);
 }
 
 void layer2_process_ctm_file_output(struct ctm_start *state)
 {
+  layer2_process_ctm_out(state);
 }
 
 static void layer2_process_ctm_in(struct ctm_state *state)
@@ -310,31 +312,19 @@ static void layer2_process_ctm_out(struct ctm_state *state)
         Shortint_fifo_push(&(state->baudotToCtmFifoState), &ucsCode, 1);
       }
 
-      /* otherwise we are reading from a text file. */
-      else if (read_from_text_file)
-      {
-        if (fread(&character, sizeof(character), 1, text_input_file_fp) > 0)
-        {
-          fprintf(stderr, "%c", character);
-          ucsCode = convertChar2UCScode(character);
-          Shortint_fifo_push(&baudotToCtmFifoState, &ucsCode, 1);
-        }
-      }
-    }
-
     if ((Shortint_fifo_check(&baudotToCtmFifoState)>0) &&
         (numCTMBitsStillToModulate<2*LENGTH_TX_BITS))
       Shortint_fifo_pop(&baudotToCtmFifoState, &ucsCode, 1);
     else
       ucsCode = 0x0016;
 
-    ctm_transmitter(ucsCode, ctm_output_buffer, &tx_state, 
-        &numCTMBitsStillToModulate, sineOutput);
+    ctm_transmitter(ucsCode, state->ctm_output_buffer, &(state->tx_state), 
+        &(state->numCTMBitsStillToModulate), state->sineOutput);
 
     ctmTransmitterIsIdle    
-      = !tx_state.burstActive && (numCTMBitsStillToModulate==0);
-    ctmCharacterTransmitted = true;
-    syncOnBaudot = false;
+      = !state->tx_state.burstActive && (state->numCTMBitsStillToModulate==0);
+    state->ctmCharacterTransmitted = true;
+    state->syncOnBaudot = false;
   }
   else
   {
