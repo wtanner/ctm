@@ -6,11 +6,11 @@
 #include <stdio.h>
 #include <string.h>
 #include <err.h>
+#include <unistd.h>
 
 #ifdef __OpenBSD__
 #include <sys/types.h>
 #include <sndio.h>
-#define PCAUDIO
 #endif
 
 #include <ctype.h>
@@ -24,36 +24,47 @@
 #include <typedefs.h>
 #include <fifo.h>
 
-static struct ctm_state state;
+/* external functions */
+extern void layer2_process_user_input(struct ctm_state *);
+extern void layer2_process_user_output(struct ctm_state *);
+extern void layer2_process_ctm_audio_in(struct ctm_state *);
+extern void layer2_process_ctm_audio_in(struct ctm_state *);
+extern void layer2_process_ctm_audio_out(struct ctm_state *);
+extern void layer2_process_ctm_file_input(struct ctm_state *);
+extern void layer2_process_ctm_file_output(struct ctm_state *);
+/* function prototypes */
+static void set_modes(enum ctm_output_mode, enum ctm_user_input_mode, int, int, int, int, char *);
+void open_audio_devices(void);
+void ctm_set_negotiation(enum on_off);
+void ctm_init(enum ctm_output_mode, enum ctm_user_input_mode, int, int, int, int, char *);
+static int setup_poll_fds(struct pollfd *);
+int ctm_start(void);
 
-static void
-set_modes(enum ctm_output_mode ctm_output_mode, enum ctm_user_input_mode input_mode, int ctm_input_fd, int ctm_output_fd, int user_input_fd, int user_output_fd)
+static struct ctm_state *state;
+
+static void set_modes(enum ctm_output_mode ctm_output_mode, enum ctm_user_input_mode input_mode, int ctm_input_fd, int ctm_output_fd, int user_input_fd, int user_output_fd, char *device_name)
 {
-  switch(output_mode) {
+  switch(ctm_output_mode) {
     case CTM_AUDIO:
       /* this is the default mode. */
-      state->audio_dev_name = ctm_input_name; 
+      state->audio_device_name = device_name; 
       break;
     case CTM_FILE:
       state->ctmReadFromFile           = true;
       state->ctmWriteToFile            = true;
       state->ctm_audio_dev_mode        = false;
-      state->ctmInputFileName          = ctm_input_name;
-      state->ctmOutputFileName         = ctm_output_name;
 
-      state->ctmInputFp = open_file_or_stdio(ctm_input_name, CTM_IO_IN);
-      state->ctmOutputFp = open_file_or_stdio(ctm_input_name, CTM_IO_OUT);
+      state->ctmInputFileFp = ctm_input_fd;
+      state->ctmOutputFileFp = ctm_output_fd;
       break;
     case CTM_FILE_COMPAT:
       state->ctmReadFromFile           = true;
       state->ctmWriteToFile            = true;
       state->ctm_audio_dev_mode        = false;
-      state->ctmInputFileName          = user_input_name;
-      state->ctmOutputFileName         = user_output_name;
       state->compat_mode               = true;
 
-      state->ctmInputFp = open_file_or_stdio(ctm_input_name, CTM_IO_IN);
-      state->ctmOutputFp = open_file_or_stdio(ctm_input_name, CTM_IO_OUT);
+      state->ctmInputFileFp = ctm_input_fd;
+      state->ctmOutputFileFp = ctm_output_fd;
       break;
     default:
       errx(1, "invalid CTM mode.");
@@ -63,16 +74,16 @@ set_modes(enum ctm_output_mode ctm_output_mode, enum ctm_user_input_mode input_m
   switch(input_mode) {
     case CTM_TEXT_IN:
       /* this is the default user input mode. */
-      state->userInputFp = open_file_or_stdio(user_input_name, CTM_IO_IN);
-      state->userOutputFp = open_file_or_stdio(user_output_name, CTM_IO_OUT);
+      state->userInputFileFp = user_input_fd;
+      state->userOutputFileFp = user_output_fd;
       break;
     case CTM_BAUDOT_IN:
       state->writeToTextFile           = false;
       state->read_from_text_file       = false;
       state->baudotReadFromFile        = true;
       state->baudotWriteToFile         = true;
-      state->userInputFp = open_file_or_stdio(user_input_name, CTM_IO_IN);
-      state->userOutputFp = open_file_or_stdio(user_output_name, CTM_IO_OUT);
+      state->userInputFileFp = user_input_fd;
+      state->userOutputFileFp = user_output_fd;
       break;
     case CTM_BAUDOT_IN_COMPAT:
       state->writeToTextFile           = false;
@@ -80,8 +91,8 @@ set_modes(enum ctm_output_mode ctm_output_mode, enum ctm_user_input_mode input_m
       state->baudotReadFromFile        = true;
       state->baudotWriteToFile         = true;
       state->compat_mode               = true;
-      state->userInputFp = open_file_or_stdio(user_input_name, CTM_IO_IN);
-      state->userOutputFp = open_file_or_stdio(user_output_name, CTM_IO_OUT);
+      state->userInputFileFp = user_input_fd;
+      state->userOutputFileFp = user_output_fd;
       break;
     default:
       errx(1, "invalid user input mode.");
@@ -89,8 +100,7 @@ set_modes(enum ctm_output_mode ctm_output_mode, enum ctm_user_input_mode input_m
   }
 }
 
-void
-open_audio_devices(void)
+void open_audio_devices(void)
 {
   if (state->ctm_audio_dev_mode)
   {
@@ -124,8 +134,7 @@ open_audio_devices(void)
 }
 
 /* enable/disable CTM negotiation (ENQUIRIES). */
-void
-ctm_set_negotiation(enum on_off flag)
+void ctm_set_negotiation(enum on_off flag)
 {
   switch(flag) {
     case ON:
@@ -139,8 +148,7 @@ ctm_set_negotiation(enum on_off flag)
   }
 }
 
-void
-ctm_init(enum ctm_output_mode output_mode, enum ctm_user_input_mode input_mode, char *ctm_output_name, char *ctm_input_name, char *user_output_name, char *user_input_name)
+void ctm_init(enum ctm_output_mode output_mode, enum ctm_user_input_mode input_mode, int ctm_output_fd, int ctm_input_fd, int user_output_fd, int user_input_fd, char *device_name)
 {
   /* initialize the ctm_state structure here. */
   state = calloc(1, sizeof(struct ctm_state));
@@ -155,12 +163,10 @@ ctm_init(enum ctm_output_mode output_mode, enum ctm_user_input_mode input_mode, 
   state->read_from_text_file           = true;
   state->baudotReadFromFile            = false;
   state->baudotWriteToFile             = false;
-  state->ctmInputFileFp                = NULL;
-  state->baudotInputFileFp             = NULL;
-  state->ctmOutputFileFp               = NULL;
-  state->baudotOutputFileFp            = NULL;
-  state->textOutputFileFp              = stdout;
-  state->textInputFileFp               = stdin;
+  state->ctmInputFileFp                = -1;
+  state->userInputFileFp               = STDIN_FILENO;
+  state->ctmOutputFileFp               = -1;
+  state->userOutputFileFp              = STDOUT_FILENO;
 
   state->ctmInputFileName              = NULL;
   state->baudotInputFileName           = NULL;
@@ -168,7 +174,7 @@ ctm_init(enum ctm_output_mode output_mode, enum ctm_user_input_mode input_mode, 
   state->baudotOutputFileName          = NULL;
   state->textOutputFileName            = NULL;
   state->text_input_filename           = NULL;
-  state->audio_device_name             = SIO_DEVANY;
+  state->audio_device_name             = device_name;
 
   state->ctmFromFarEndDetected         = false;
   state->ctmCharacterTransmitted       = false;
@@ -191,9 +197,8 @@ ctm_init(enum ctm_output_mode output_mode, enum ctm_user_input_mode input_mode, 
   state->baudot_output_buffer = calloc(LENGTH_TONE_VEC, sizeof(Shortint));
 
   /* set the i/o modes. */
-  set_modes(state, output_mode, input_mode, ctm_output_name, ctm_input_name, user_output_name, user_input_name);
+  set_modes(output_mode, input_mode, ctm_output_fd, ctm_input_fd, user_output_fd, user_input_fd, device_name);
 
-#ifdef PCAUDIO /* only if real-time audio I/O is desired */
   state->audio_hdl                     = NULL;
 
   sio_initpar(&state->audio_params);
@@ -209,9 +214,7 @@ ctm_init(enum ctm_output_mode output_mode, enum ctm_user_input_mode input_mode, 
   //state->audio_params.xrun = SIO_ERROR;
 
   /* if the user has specified to use an audio device, open it here */
-  open_audio_devices(state);
-
-#endif
+  open_audio_devices();
 
   /* set up transmitter & receiver */
   init_baudot_tonedemod(&(state->baudot_tonedemod_state));
@@ -226,7 +229,7 @@ ctm_init(enum ctm_output_mode output_mode, enum ctm_user_input_mode input_mode, 
   Shortint_fifo_init(&(state->baudotToCtmFifoState),  3);
 }
 
-void setup_poll_fds(struct pollfd *pfds)
+static int setup_poll_fds(struct pollfd *pfds)
 {
   /* setup POLL structs:
    * 0 = user input (baudot or text)
@@ -234,6 +237,7 @@ void setup_poll_fds(struct pollfd *pfds)
    * 2 = ctm input OR ctm audio
    * 3 = ctm output
    */
+  int nfds;
 
   if (state->ctm_audio_dev_mode)
     nfds = 3;
@@ -242,29 +246,33 @@ void setup_poll_fds(struct pollfd *pfds)
 
   pfds = calloc(nfds, sizeof(struct pollfd));
 
-  pfds[0]->fd = state->userInputFileFp;
-  pfds[1]->fd = state->userOutputFileFp;
-  pfds[0]->events = POLLIN;
-  pfds[1]->events = POLLIN;
+  pfds[0].fd = state->userInputFileFp;
+  pfds[1].fd = state->userOutputFileFp;
+  pfds[0].events = POLLIN;
+  pfds[1].events = POLLIN;
 
   if (state->ctm_audio_dev_mode) {
-    if (sio_pollfd(state->audio_hdl, pfds[2], POLLIN|POLLOUT) != 1)
+    if (sio_pollfd(state->audio_hdl, &pfds[2], POLLIN|POLLOUT) != 1)
       errx(1, "unable to setup audio device polling.");
   }
   else {
-    pfds[2]->fd = state->ctmInputFileFp;
-    pfds[3]->fd = state->ctmOutputfileFp;
-    pfds[2]->events = POLLIN;
-    pfds[3]->events = POLLIN;
+    pfds[2].fd = state->ctmInputFileFp;
+    pfds[3].fd = state->ctmOutputFileFp;
+    pfds[2].events = POLLIN;
+    pfds[3].events = POLLIN;
   }
 
+  return nfds;
 }
-int
-ctm_start(void)
+
+int ctm_start(void)
 {
-  struct pollfd *pfds;
+  struct pollfd *pfds = NULL;
   int nfds;
   int r_nfds;
+  int index;
+
+  nfds = setup_poll_fds(pfds);
 
 #ifdef PCAUDIO
   if (state->ctm_audio_dev_mode)
@@ -279,8 +287,8 @@ ctm_start(void)
   } 
 #endif
 
-  if (disableNegotiation)
-    ctmFromFarEndDetected = true;
+  if (state->disableNegotiation)
+    state->ctmFromFarEndDetected = true;
 
   /*
    * Main processing loop
@@ -289,26 +297,26 @@ ctm_start(void)
     r_nfds = poll(pfds, nfds, INFTIM);
 
     if (r_nfds == -1)
-      err(1, NULL);
+      errx(1, "polling error!");
     
     for (index=0; index < nfds; index++) {
       
       switch (index) {
         case 0:
-          if (pfds[index]->r_events & (POLLIN))
+          if (pfds[index].revents & (POLLIN))
             layer2_process_user_input(state);
           break;
         case 1:
-          if (pfds[index]->r_events & (POLLOUT))
+          if (pfds[index].revents & (POLLOUT))
             layer2_process_user_output(state);
           break;
         case 2:
           if (state->ctm_audio_dev_mode) {
-            if(sio_revents(state->audio_hdl, pfds[2]) & (POLLIN)) {
+            if(sio_revents(state->audio_hdl, &pfds[2]) & (POLLIN)) {
               /* process audio in */
               layer2_process_ctm_audio_in(state);
             }
-            if(sio_revents(state->audio_hdl, pfds[2]) & (POLLOUT)) {
+            if(sio_revents(state->audio_hdl, &pfds[2]) & (POLLOUT)) {
               layer2_process_ctm_audio_out(state);
             }
           }
@@ -316,7 +324,7 @@ ctm_start(void)
             layer2_process_ctm_file_input(state);
           break;
         case 3:
-          if (pfds[index]->r_events & (POLLIN|POLLOUT))
+          if (pfds[index].revents & (POLLIN|POLLOUT))
             layer2_process_ctm_file_output(state);
           break;
         default:

@@ -58,7 +58,7 @@ MODULE_SOURCES  = diag_deinterleaver.c diag_interleaver.c \
                   tonedemod.c tonemod.c wait_for_sync.c \
                   baudot_functions.c ucs_functions.c \
                   ctm_receiver.c ctm_transmitter.c \
-                  sin_fip.c fifo.c parse_arg.c
+                  sin_fip.c fifo.c layer2.c ctm.c
 
 
 MODULE_INCLUDES = $(MODULE_SOURCES:.c=.h)

@@ -1,6 +1,11 @@
 #ifndef ctm_h
 #define ctm_h
 
+#ifdef __OpenBSD__
+#include <sys/types.h>
+#include <sndio.h>
+#endif
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -78,7 +83,7 @@ struct ctm_state {
 
     /* Define file variables */
     
-    int ctmInputfileFp;
+    int ctmInputFileFp;
     int ctmOutputFileFp;
     int userInputFileFp;
     int userOutputFileFp;
@@ -91,10 +96,8 @@ struct ctm_state {
     const char* text_input_filename;
     const char* audio_device_name;
   
-#ifdef PCAUDIO /* only if real-time audio I/O is desired */
     struct sio_hdl *audio_hdl;
     struct sio_par audio_params; 
-#endif
 };
 
 /*
@@ -128,7 +131,7 @@ enum on_off {
 */
 
 /* The first char* name is used for audio devices, if that is the mode enabled. */
-void ctm_init(enum ctm_output_mode, enum ctm_user_input_mode, char *, char *, char *, char *);
+void ctm_init(enum ctm_output_mode output_mode, enum ctm_user_input_mode input_mode, int, int, int, int, char *);
 void ctm_set_negotiation(enum on_off);
 int ctm_start(void);
 
