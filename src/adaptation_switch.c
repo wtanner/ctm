@@ -102,11 +102,9 @@ open_file_or_stdio(const char *filename, int flags)
   {
     if (flags & O_WRONLY)
       file_fd = STDOUT_FILENO;
-    else if (flags & O_RDONLY)
-      file_fd = STDIN_FILENO;
     else
-        errx(1, "invalid read/write flag.");
-    }
+      file_fd = STDIN_FILENO;
+  }
 
   else
   {

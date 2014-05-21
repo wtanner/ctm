@@ -37,12 +37,12 @@ static void set_modes(enum ctm_output_mode, enum ctm_user_input_mode, int, int, 
 void open_audio_devices(void);
 void ctm_set_negotiation(enum on_off);
 void ctm_init(enum ctm_output_mode, enum ctm_user_input_mode, int, int, int, int, char *);
-static int setup_poll_fds(struct pollfd *);
+static void setup_poll_fds(struct pollfd *);
 int ctm_start(void);
 
 static struct ctm_state *state;
 
-static void set_modes(enum ctm_output_mode ctm_output_mode, enum ctm_user_input_mode input_mode, int ctm_input_fd, int ctm_output_fd, int user_input_fd, int user_output_fd, char *device_name)
+static void set_modes(enum ctm_output_mode ctm_output_mode, enum ctm_user_input_mode input_mode, int ctm_output_fd, int ctm_input_fd, int user_output_fd, int user_input_fd, char *device_name)
 {
   switch(ctm_output_mode) {
     case CTM_AUDIO:
@@ -229,7 +229,7 @@ void ctm_init(enum ctm_output_mode output_mode, enum ctm_user_input_mode input_m
   Shortint_fifo_init(&(state->baudotToCtmFifoState),  3);
 }
 
-static int setup_poll_fds(struct pollfd *pfds)
+static void setup_poll_fds(struct pollfd *pfds)
 {
   /* setup POLL structs:
    * 0 = user input (baudot or text)
@@ -237,19 +237,11 @@ static int setup_poll_fds(struct pollfd *pfds)
    * 2 = ctm input OR ctm audio
    * 3 = ctm output
    */
-  int nfds;
-
-  if (state->ctm_audio_dev_mode)
-    nfds = 3;
-  else
-    nfds = 4;
-
-  pfds = calloc(nfds, sizeof(struct pollfd));
 
   pfds[0].fd = state->userInputFileFp;
   pfds[1].fd = state->userOutputFileFp;
   pfds[0].events = POLLIN;
-  pfds[1].events = POLLIN;
+  pfds[1].events = POLLOUT;
 
   if (state->ctm_audio_dev_mode) {
     if (sio_pollfd(state->audio_hdl, &pfds[2], POLLIN|POLLOUT) != 1)
@@ -259,10 +251,8 @@ static int setup_poll_fds(struct pollfd *pfds)
     pfds[2].fd = state->ctmInputFileFp;
     pfds[3].fd = state->ctmOutputFileFp;
     pfds[2].events = POLLIN;
-    pfds[3].events = POLLIN;
+    pfds[3].events = POLLOUT;
   }
-
-  return nfds;
 }
 
 int ctm_start(void)
@@ -272,9 +262,14 @@ int ctm_start(void)
   int r_nfds;
   int index;
 
-  nfds = setup_poll_fds(pfds);
+  if (state->ctm_audio_dev_mode)
+    nfds = 3;
+  else
+    nfds = 4;
 
-#ifdef PCAUDIO
+  if ((pfds = calloc(nfds, sizeof(struct pollfd))) == NULL)
+    err(1, "pfds == NULL.");
+
   if (state->ctm_audio_dev_mode)
   {
     fprintf(stderr, "starting audio device \"%s\"...\n", state->audio_device_name);
@@ -285,10 +280,11 @@ int ctm_start(void)
     if(sio_setvol(state->audio_hdl, SIO_MAXVOL) == 0)
       errx(1, "unable to set audio volume on device \"%s\".\n", state->audio_device_name);
   } 
-#endif
 
   if (state->disableNegotiation)
     state->ctmFromFarEndDetected = true;
+
+  setup_poll_fds(pfds);
 
   /*
    * Main processing loop

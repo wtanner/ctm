@@ -119,7 +119,7 @@ void layer2_process_user_input(struct ctm_state *state)
     if (Shortint_fifo_check(&(state->baudotOutTTYCodeFifoState)) < state->baudotOutTTYCodeFifoLength)
     {
       if (read(state->userInputFileFp, &character, 1) == -1)
-        errx(1, "error reading from user input file.");
+        err(1, "error reading from user input file");
 
       ttyCode = convertChar2ttyCode(character);
       Shortint_fifo_push(&(state->baudotOutTTYCodeFifoState), &ttyCode, 1);
@@ -183,7 +183,7 @@ void layer2_process_user_output(struct ctm_state *state)
     /* otherwise we are writing to a text file */
     character = convertTTYcode2char(ttyCode);
     if (write(state->userOutputFileFp, &character, 1) == -1)
-      errx(1, "error writing to text output file.");
+      errx(1, "error writing to text output file, file descriptor %d.", state->userOutputFileFp);
   }
 }
 
