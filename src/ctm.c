@@ -104,9 +104,8 @@ void open_audio_devices(void)
 {
   if (state->ctm_audio_dev_mode)
   {
-    /* open in blocking I/O mode, as that appears to be what the original 3GPP code expects in its processing loop. */
     fprintf(stderr, "opening audio device for duplex i/o...\n");
-    state->audio_hdl = sio_open(state->audio_device_name, SIO_PLAY | SIO_REC, 0);
+    state->audio_hdl = sio_open(state->audio_device_name, SIO_PLAY | SIO_REC, 1);
     if (state->audio_hdl == NULL)
     {
       errx(1, "unable to open audio device \"%s\" for duplex i/o\n", state->audio_device_name);
@@ -189,6 +188,8 @@ void ctm_init(enum ctm_output_mode output_mode, enum ctm_user_input_mode input_m
   state->baudotAlreadyReceived         = false;
   state->actualBaudotCharDetected      = false;
   state->baudotOutTTYCodeFifoLength    = 50;
+
+  state->audio_buffer_size             = LENGTH_TONE_VEC;
 
   /* initialize the audio buffers. */
   state->ctm_input_buffer = calloc(LENGTH_TONE_VEC, sizeof(Shortint));
@@ -290,10 +291,11 @@ int ctm_start(void)
    * Main processing loop
    */
   for(;;) {
+    setup_poll_fds(pfds);
     r_nfds = poll(pfds, nfds, INFTIM);
 
     if (r_nfds == -1)
-      errx(1, "polling error!");
+      err(1, "ctm_start: polling error");
     
     for (index=0; index < nfds; index++) {
       
@@ -308,11 +310,11 @@ int ctm_start(void)
           break;
         case 2:
           if (state->ctm_audio_dev_mode) {
-            if(sio_revents(state->audio_hdl, &pfds[2]) & (POLLIN)) {
+            if((sio_revents(state->audio_hdl, &pfds[2]) & POLLIN) == POLLIN) {
               /* process audio in */
               layer2_process_ctm_audio_in(state);
             }
-            if(sio_revents(state->audio_hdl, &pfds[2]) & (POLLOUT)) {
+            if((sio_revents(state->audio_hdl, &pfds[2]) & POLLOUT) == POLLOUT) {
               layer2_process_ctm_audio_out(state);
             }
           }
@@ -324,11 +326,9 @@ int ctm_start(void)
             layer2_process_ctm_file_output(state);
           break;
         default:
-          errx(1, "invalid pollfd index.");
+          errx(1, "ctm_start: invalid pollfd index.");
           break;
       }
     }
   }
-
-  return 0;
 }

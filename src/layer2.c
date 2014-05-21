@@ -179,8 +179,9 @@ void layer2_process_user_output(struct ctm_state *state)
     if (write(state->userOutputFileFp, state->baudot_output_buffer, state->audio_buffer_size) == -1)
       errx(1, "error writing to baudot output file.");
   }
-  else {
-    /* otherwise we are writing to a text file */
+  /* otherwise we are writing to a text file */
+  else if ((Shortint_fifo_check(&(state->ctmToBaudotFifoState)) >0)) { 
+    Shortint_fifo_pop(&state->ctmToBaudotFifoState, &ttyCode, 1);
     character = convertTTYcode2char(ttyCode);
     if (write(state->userOutputFileFp, &character, 1) == -1)
       errx(1, "error writing to text output file, file descriptor %d.", state->userOutputFileFp);
@@ -200,7 +201,7 @@ void layer2_process_ctm_audio_out(struct ctm_state *state)
 {
   layer2_process_ctm_out(state);
 
-  if (sio_write(state->audio_hdl, state->ctm_input_buffer, state->audio_buffer_size) < state->audio_buffer_size) {
+  if (sio_write(state->audio_hdl, state->ctm_output_buffer, state->audio_buffer_size) < state->audio_buffer_size) {
     warnx("overrun in audio output to device.");
   }
 }
@@ -356,7 +357,7 @@ static void layer2_process_ctm_out(struct ctm_state *state)
   /* Otherwise, the audio samples are bypassed!                         */
 
   if((((Shortint_fifo_check(&(state->baudotOutTTYCodeFifoState))>0) || 
-          (state->actualBaudotCharDetected || (state->cntHangoverFramesForMuteBaudot>0) ) || state->read_from_text_file) && 
+          (state->actualBaudotCharDetected || (state->cntHangoverFramesForMuteBaudot>0))) && 
         (state->ctmFromFarEndDetected || (state->cntFramesSinceBurstInit<ENQUIRY_TIMEOUT))) ||
       (Shortint_fifo_check(&(state->baudotToCtmFifoState))>0) || 
       (state->numCTMBitsStillToModulate>0) || state->tx_state.burstActive ||
@@ -382,48 +383,48 @@ static void layer2_process_ctm_out(struct ctm_state *state)
         ucsCode = convertChar2UCScode(character);
         Shortint_fifo_push(&(state->baudotToCtmFifoState), &ucsCode, 1);
       }
-
-      if ((Shortint_fifo_check(&(state->baudotToCtmFifoState))>0) &&
-          (state->numCTMBitsStillToModulate<2*LENGTH_TX_BITS))
-        Shortint_fifo_pop(&(state->baudotToCtmFifoState), &ucsCode, 1);
-      else
-        ucsCode = 0x0016;
-
-      ctm_transmitter(ucsCode, state->ctm_output_buffer, &(state->tx_state), 
-          &(state->numCTMBitsStillToModulate), state->sineOutput);
-
-      state->ctmTransmitterIsIdle    
-        = !state->tx_state.burstActive && (state->numCTMBitsStillToModulate==0);
-      state->ctmCharacterTransmitted = true;
-      state->syncOnBaudot = false;
     }
+
+    if ((Shortint_fifo_check(&(state->baudotToCtmFifoState))>0) &&
+        (state->numCTMBitsStillToModulate<2*LENGTH_TX_BITS))
+      Shortint_fifo_pop(&(state->baudotToCtmFifoState), &ucsCode, 1);
+    else
+      ucsCode = 0x0016;
+
+    ctm_transmitter(ucsCode, state->ctm_output_buffer, &(state->tx_state), 
+        &(state->numCTMBitsStillToModulate), state->sineOutput);
+
+    state->ctmTransmitterIsIdle    
+      = !state->tx_state.burstActive && (state->numCTMBitsStillToModulate==0);
+    state->ctmCharacterTransmitted = true;
+    state->syncOnBaudot = false;
+  }
+  else
+  {
+    /* After terminating a CTM burst, the forwarding of the original */
+    /* audio signal might have to be delayed if there is actually    */
+    /* a Baudot character in progress. In this case, we have to mute */
+    /* the output signal until the character is completed.           */
+    /* The audio signal is also muted if bypassing has been          */
+    /* prohibited by the user (i.e. by using the option -nobypass)   */
+    if ((!state->syncOnBaudot && 
+          (state->baudot_tonedemod_state.cntBitsActualChar>0)) || state->disableBypass)
+      for (cnt=0; cnt<LENGTH_TONE_VEC; cnt++)
+        state->ctm_output_buffer[cnt] = 0;
     else
     {
-      /* After terminating a CTM burst, the forwarding of the original */
-      /* audio signal might have to be delayed if there is actually    */
-      /* a Baudot character in progress. In this case, we have to mute */
-      /* the output signal until the character is completed.           */
-      /* The audio signal is also muted if bypassing has been          */
-      /* prohibited by the user (i.e. by using the option -nobypass)   */
-      if ((!state->syncOnBaudot && 
-            (state->baudot_tonedemod_state.cntBitsActualChar>0)) || state->disableBypass)
-        for (cnt=0; cnt<LENGTH_TONE_VEC; cnt++)
-          state->ctm_output_buffer[cnt] = 0;
-      else
-      {
-        /* Bypass audio samples. */
-        for (cnt=0; cnt<LENGTH_TONE_VEC; cnt++)
-          state->ctm_output_buffer[cnt] = state->baudot_input_buffer[cnt];
-        state->syncOnBaudot = true;
-      }
-
-      /* discard characters in oder to avoid FIFO buffer overflows */
-      if (Shortint_fifo_check(&(state->baudotOutTTYCodeFifoState))>=
-          state->baudotOutTTYCodeFifoLength-1)
-        Shortint_fifo_pop(&(state->baudotOutTTYCodeFifoState), &ttyCode, 1);
+      /* Bypass audio samples. */
+      for (cnt=0; cnt<LENGTH_TONE_VEC; cnt++)
+        state->ctm_output_buffer[cnt] = state->baudot_input_buffer[cnt];
+      state->syncOnBaudot = true;
     }
 
-    if (state->cntFramesSinceBurstInit<maxShortint)
-      state->cntFramesSinceBurstInit++;
+    /* discard characters in oder to avoid FIFO buffer overflows */
+    if (Shortint_fifo_check(&(state->baudotOutTTYCodeFifoState))>=
+        state->baudotOutTTYCodeFifoLength-1)
+      Shortint_fifo_pop(&(state->baudotOutTTYCodeFifoState), &ttyCode, 1);
   }
+
+  if (state->cntFramesSinceBurstInit<maxShortint)
+    state->cntFramesSinceBurstInit++;
 }

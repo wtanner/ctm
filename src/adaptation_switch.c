@@ -221,5 +221,5 @@ int main(int argc, char** argv)
   ctm_set_negotiation(negotiation_flag);
   ctm_start();
 
-  //exit(0);
+  exit(0);
 }

@@ -79,7 +79,7 @@ struct ctm_state {
     Shortint   *baudot_output_buffer;
     Shortint   *ctm_output_buffer;
 
-    size_t     audio_buffer_size; /* in bytes */
+    int        audio_buffer_size;
 
     /* Define file variables */
     
