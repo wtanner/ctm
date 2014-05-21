@@ -43,7 +43,6 @@
 #include "ucs_functions.h"
 #include <typedefs.h>
 #include <fifo.h>
-#include <parse_arg.h>
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -72,14 +71,14 @@ void writeHead()
 
 /***********************************************************************/
 
-void errorMsg(const char* filename)
+void usage()
 {
   fprintf(stderr, "                     +------------+                 \n");
   fprintf(stderr, "  Baudot Tones  ---> |            | ---> CTM signal \n");
   fprintf(stderr, "                     | adaptation |                 \n");
   fprintf(stderr, "  Baudot Tones  <--- |            | <--- CTM signal \n");
   fprintf(stderr, "                     +------------+                 \n");
-  fprintf(stderr, "use: %s [ arguments ]\n", filename);
+  fprintf(stderr, "use: ctm [ arguments ]\n");
   fprintf(stderr, "  -ctmin      <input_file>   input file with CTM signal \n");
   fprintf(stderr, "  -ctmout     <output_file>  output file for CTM signal \n");
   fprintf(stderr, "  -baudotin   <input_file>   input file with Baudot Tones \n");
@@ -217,83 +216,13 @@ int main(int argc, const char** argv)
   else
     user_input_mode = CTM_TEXT_IN;
 
-#ifdef PCAUDIO /* if desired, open audio device for duplex i/o */
-  if (ctm_audio_dev_mode)
-  {
-    /* open in blocking I/O mode, as that appears to be what the original 3GPP code expects in its processing loop. */
-    fprintf(stderr, "opening audio device for duplex i/o...\n");
-    audio_hdl = sio_open(audio_device_name, SIO_PLAY | SIO_REC, 0);
-    if (audio_hdl == NULL)
-      {
-        errx(1, "unable to open audio device \"%s\" for duplex i/o\n", audio_device_name);
-      }
-
-    /* attempt to set the device parameters. */
-    if (sio_setpar(audio_hdl, &audio_params) == 0)
-    {
-      errx(1, "unable to set device parameters on audio device \"%s\"\n", audio_device_name);
-    }
-
-    /* check to see that the device parameters were actually set up correctly. Not all devices may support the required parameters. */
-    struct sio_par dev_params;
-    if (sio_getpar(audio_hdl, &dev_params) == 0)
-    {
-      errx(1, "unable to get device parameters on audio device \"%s\"\n", audio_device_name);
-    }
-
-    else if ((audio_params.rate != dev_params.rate) || (audio_params.bits != dev_params.bits) || (audio_params.rchan != dev_params.rchan) || (audio_params.pchan != dev_params.pchan) || (audio_params.appbufsz != dev_params.appbufsz))
-
-    {
-      errx(1, "unable to set the correct parameters on audio device \"%s\"\n", audio_device_name);
-    } 
-  }
-#endif
-  
-  /* set up transmitter & receiver */
-  init_baudot_tonedemod(&baudot_tonedemod_state);
-  init_baudot_tonemod(&baudot_tonemod_state);
-  init_ctm_transmitter(&tx_state);
-  init_ctm_receiver(&rx_state);  
-
-  Shortint_fifo_init(&signalFifoState, SYMB_LEN+LENGTH_TONE_VEC);
-  Shortint_fifo_init(&baudotOutTTYCodeFifoState, baudotOutTTYCodeFifoLength);
-  Shortint_fifo_init(&ctmOutTTYCodeFifoState,  2);
-  Shortint_fifo_init(&ctmToBaudotFifoState,  4000);
-  Shortint_fifo_init(&baudotToCtmFifoState,  3);
-  
-  if (numSamplesToProcess < maxULongint)
-    fprintf(stderr, "number of samples to process: %u\n\n", numSamplesToProcess);
-  
-#ifdef PCAUDIO
-  if (ctm_audio_dev_mode)
-  {
-    fprintf(stderr, "starting audio device \"%s\"...\n", audio_device_name);
-    if(sio_start(audio_hdl) == 0)
-    {
-      errx(1, "unable to start audio device \"%s\".\n", audio_device_name);
-    }
-
-    if(sio_setvol(audio_hdl, SIO_MAXVOL) == 0)
-    {
-      errx(1, "unable to set audio volume on device \"%s\".\n", audio_device_name);
-    }
-
-    /* we have to write to the output buffer first or reading will block indefinitely. */
-    /* debug */
-    for(cnt=0;cnt<LENGTH_TONE_VEC;cnt++)
-      ctm_output_buffer[cnt] = (short)rand();
-    for(cnt=0;cnt<10;cnt++)
-      sio_write(audio_hdl, ctm_output_buffer, LENGTH_TONE_VEC*sizeof(Shortint));
-    /* debug end */
-  } 
-#endif
-
-  if (disableNegotiation)
-    ctmFromFarEndDetected = true;
-
   /**************************************************************/
   /* Main processing loop                                       */
   /**************************************************************/
+
+  //ctm_init
+  //ctm_set_negotiation(negotiation_flag)
+  //ctm_start
 
   do
     {

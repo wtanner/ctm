@@ -77,12 +77,10 @@ struct ctm_state {
 
     /* Define file variables */
     
-    FILE  *ctmInputFileFp;
-    FILE  *baudotInputFileFp;
-    FILE  *ctmOutputFileFp;
-    FILE  *baudotOutputFileFp;
-    FILE  *textOutputFileFp;
-    FILE  *text_input_file_fp;
+    int ctmInputfileFp;
+    int ctmOutputFileFp;
+    int userInputFileFp;
+    int userOutputFileFp;
   
     const char* ctmInputFileName;
     const char* baudotInputFileName;
