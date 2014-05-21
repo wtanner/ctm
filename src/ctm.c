@@ -2,6 +2,28 @@
 
 #include "ctm.h"
 
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include <err.h>
+
+#ifdef __OpenBSD__
+#include <sys/types.h>
+#include <sndio.h>
+#define PCAUDIO
+#endif
+
+#include <ctype.h>
+#include <termios.h>
+
+#include "ctm_defines.h"
+#include "ctm_transmitter.h"
+#include "ctm_receiver.h"
+#include "baudot_functions.h"
+#include "ucs_functions.h"
+#include <typedefs.h>
+#include <fifo.h>
+
 static struct ctm_state state;
 
 static void
@@ -274,27 +296,28 @@ ctm_start(void)
       switch (index) {
         case 0:
           if (pfds[index]->r_events & (POLLIN))
-            /* handle user input */
+            layer2_process_user_input(state);
           break;
         case 1:
           if (pfds[index]->r_events & (POLLOUT))
-            /* handle user input */
+            layer2_process_user_output(state);
           break;
         case 2:
           if (state->ctm_audio_dev_mode) {
             if(sio_revents(state->audio_hdl, pfds[2]) & (POLLIN)) {
               /* process audio in */
+              layer2_process_ctm_audio_in(state);
             }
             if(sio_revents(state->audio_hdl, pfds[2]) & (POLLOUT)) {
-              /* process audio out */
+              layer2_process_ctm_audio_out(state);
             }
           }
           else
-            /* process ctm input */
+            layer2_process_ctm_file_input(state);
           break;
         case 3:
           if (pfds[index]->r_events & (POLLIN|POLLOUT))
-            /* process ctm output */
+            layer2_process_ctm_file_output(state);
           break;
         default:
           errx(1, "invalid pollfd index.");

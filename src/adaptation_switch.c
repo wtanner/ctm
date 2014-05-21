@@ -226,19 +226,6 @@ int main(int argc, const char** argv)
 
   do
     {
-#ifdef PCAUDIO /* read samples from audio-I/O, if desired */
-      if (ctm_audio_dev_mode)
-      {
-        /* ctm_input_buffer == CTM input samples */
-        size_t bytes_left_to_read = LENGTH_TONE_VEC*sizeof(Shortint);
-
-        /* block until we have enough input samples. */
-        while (bytes_left_to_read > 0)
-        {
-          bytes_left_to_read -= sio_read(audio_hdl, ctm_input_buffer + bytes_left_to_read*sizeof(Shortint), bytes_left_to_read);
-        }
-      }
-#endif
       /* Read next frame of input samples from files */
       if (baudotReadFromFile)
       {
@@ -646,13 +633,13 @@ int main(int argc, const char** argv)
   while (1);
   
   fprintf(stderr, "\n");
-  fclose(ctmInputFileFp);
-  fclose(baudotInputFileFp);
-  fclose(ctmOutputFileFp);
-  fclose(baudotOutputFileFp);
+  close(ctmInputFileFp);
+  close(baudotInputFileFp);
+  close(ctmOutputFileFp);
+  close(baudotOutputFileFp);
   
   if (writeToTextFile)
-    fclose(textOutputFileFp);
+    close(textOutputFileFp);
 
 #ifdef PCAUDIO
   if (ctm_audio_dev_mode)

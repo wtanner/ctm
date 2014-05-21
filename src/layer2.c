@@ -1,9 +1,31 @@
+
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include <err.h>
+
+#ifdef __OpenBSD__
+#include <sys/types.h>
+#include <sndio.h>
+#define PCAUDIO
+#endif
+
+#include <ctype.h>
+#include <termios.h>
+
 #include "ctm.h"
-#include "typedefs.h"
+#include "ctm_defines.h"
+#include "ctm_transmitter.h"
+#include "ctm_receiver.h"
+#include "baudot_functions.h"
+#include "ucs_functions.h"
+#include <typedefs.h>
+#include <fifo.h>
 
 static Shortint ttyCode;
 static char character;
 static UShortint ucsCode;
+static Shortint cnt;
 
 void layer2_process_user_input(struct ctm_state *state)
 {
@@ -166,12 +188,45 @@ void layer2_process_ctm_audio_out(struct ctm_state *state)
 
 void layer2_process_ctm_file_input(struct ctm_state *state)
 {
+  if(read(state->ctmInputFileFp, ctm_input_buffer, state->audio_buffer_size) < state->audio_buffer_size) 
+  {
+    /* if EOF is reached, use buffer with zeros instead */
+    ctmEOF = true;
+    for (cnt=0; cnt<LENGTH_TONE_VEC; cnt++)
+      ctm_input_buffer[cnt]=0;
+  }
+
+#ifdef LSBFIRST
+  if (compat_mode)
+  {
+    /* The test pattern baudot PCM files are in big-endian. If we are on a little-endian machine, we will need to swap the bytes */
+    for (cnt=0; cnt<LENGTH_TONE_VEC; cnt++)
+    {
+      ctm_input_buffer[cnt] = swap16(ctm_input_buffer[cnt]);
+    }
+  }
+#endif
+
   layer2_process_ctm_in(state);
 }
 
 void layer2_process_ctm_file_output(struct ctm_start *state)
 {
   layer2_process_ctm_out(state);
+
+#ifdef LSBFIRST
+  /* The test pattern baudot PCM files are in big-endian. If we are on a little-endian machine, we will need to swap the bytes */
+  if (compat_mode)
+  {
+    for (cnt=0; cnt<LENGTH_TONE_VEC; cnt++)
+    {
+      ctm_output_buffer[cnt] = swap16(ctm_output_buffer[cnt]);
+    }
+  }
+#endif
+
+  if (write(state->userOutputFileFp, state->ctm_output_buffer, state->audio_buffer_size) < state->audio_buffer_size)
+    errx(1, "error while writing to '%s'\n", ctmOutputFileName);
 }
 
 static void layer2_process_ctm_in(struct ctm_state *state)
@@ -312,46 +367,47 @@ static void layer2_process_ctm_out(struct ctm_state *state)
         Shortint_fifo_push(&(state->baudotToCtmFifoState), &ucsCode, 1);
       }
 
-    if ((Shortint_fifo_check(&baudotToCtmFifoState)>0) &&
-        (numCTMBitsStillToModulate<2*LENGTH_TX_BITS))
-      Shortint_fifo_pop(&baudotToCtmFifoState, &ucsCode, 1);
-    else
-      ucsCode = 0x0016;
+      if ((Shortint_fifo_check(&baudotToCtmFifoState)>0) &&
+          (numCTMBitsStillToModulate<2*LENGTH_TX_BITS))
+        Shortint_fifo_pop(&baudotToCtmFifoState, &ucsCode, 1);
+      else
+        ucsCode = 0x0016;
 
-    ctm_transmitter(ucsCode, state->ctm_output_buffer, &(state->tx_state), 
-        &(state->numCTMBitsStillToModulate), state->sineOutput);
+      ctm_transmitter(ucsCode, state->ctm_output_buffer, &(state->tx_state), 
+          &(state->numCTMBitsStillToModulate), state->sineOutput);
 
-    ctmTransmitterIsIdle    
-      = !state->tx_state.burstActive && (state->numCTMBitsStillToModulate==0);
-    state->ctmCharacterTransmitted = true;
-    state->syncOnBaudot = false;
-  }
-  else
-  {
-    /* After terminating a CTM burst, the forwarding of the original */
-    /* audio signal might have to be delayed if there is actually    */
-    /* a Baudot character in progress. In this case, we have to mute */
-    /* the output signal until the character is completed.           */
-    /* The audio signal is also muted if bypassing has been          */
-    /* prohibited by the user (i.e. by using the option -nobypass)   */
-    if ((!syncOnBaudot && 
-          (baudot_tonedemod_state.cntBitsActualChar>0)) || disableBypass)
-      for (cnt=0; cnt<LENGTH_TONE_VEC; cnt++)
-        ctm_output_buffer[cnt] = 0;
+      ctmTransmitterIsIdle    
+        = !state->tx_state.burstActive && (state->numCTMBitsStillToModulate==0);
+      state->ctmCharacterTransmitted = true;
+      state->syncOnBaudot = false;
+    }
     else
     {
-      /* Bypass audio samples. */
-      for (cnt=0; cnt<LENGTH_TONE_VEC; cnt++)
-        ctm_output_buffer[cnt] = baudot_input_buffer[cnt];
-      syncOnBaudot = true;
+      /* After terminating a CTM burst, the forwarding of the original */
+      /* audio signal might have to be delayed if there is actually    */
+      /* a Baudot character in progress. In this case, we have to mute */
+      /* the output signal until the character is completed.           */
+      /* The audio signal is also muted if bypassing has been          */
+      /* prohibited by the user (i.e. by using the option -nobypass)   */
+      if ((!syncOnBaudot && 
+            (baudot_tonedemod_state.cntBitsActualChar>0)) || disableBypass)
+        for (cnt=0; cnt<LENGTH_TONE_VEC; cnt++)
+          ctm_output_buffer[cnt] = 0;
+      else
+      {
+        /* Bypass audio samples. */
+        for (cnt=0; cnt<LENGTH_TONE_VEC; cnt++)
+          ctm_output_buffer[cnt] = baudot_input_buffer[cnt];
+        syncOnBaudot = true;
+      }
+
+      /* discard characters in oder to avoid FIFO buffer overflows */
+      if (Shortint_fifo_check(&baudotOutTTYCodeFifoState)>=
+          baudotOutTTYCodeFifoLength-1)
+        Shortint_fifo_pop(&baudotOutTTYCodeFifoState, &ttyCode, 1);
     }
 
-    /* discard characters in oder to avoid FIFO buffer overflows */
-    if (Shortint_fifo_check(&baudotOutTTYCodeFifoState)>=
-        baudotOutTTYCodeFifoLength-1)
-      Shortint_fifo_pop(&baudotOutTTYCodeFifoState, &ttyCode, 1);
+    if (cntFramesSinceBurstInit<maxShortint)
+      cntFramesSinceBurstInit++;
   }
-
-  if (cntFramesSinceBurstInit<maxShortint)
-    cntFramesSinceBurstInit++;
 }
