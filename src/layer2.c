@@ -142,8 +142,8 @@ void layer2_process_user_output(struct ctm_state *state)
     /* if the Baudot modulator is able to process a new character   */
     /* --> pop the character from the fifo.                         */
     if ((Shortint_fifo_check(&(state->ctmToBaudotFifoState)) >0) &&
-        (state->numBaudotBitsStillToModulate <= 8) &&
-        (state->cntFramesSinceLastBypassFromCTM>=10*160/LENGTH_TONE_VEC))
+        (((state->numBaudotBitsStillToModulate <= 8) &&
+        (state->cntFramesSinceLastBypassFromCTM>=10*160/LENGTH_TONE_VEC)) || state->writeToTextFile))
       Shortint_fifo_pop(&state->ctmToBaudotFifoState, &ttyCode, 1);
     else
       ttyCode = -1;
@@ -159,8 +159,7 @@ void layer2_process_user_output(struct ctm_state *state)
       if (state->cntFramesSinceLastBypassFromCTM<maxShortint)
         state->cntFramesSinceLastBypassFromCTM++;
     }
-
-    else {
+    else if (ttyCode != - 1) {
       character = convertTTYcode2char(ttyCode);
       if (write(state->userOutputFileFp, &character, 1) == -1)
         errx(1, "error writing to text output file, file descriptor %d.", state->userOutputFileFp);

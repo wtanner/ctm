@@ -232,7 +232,7 @@ void ctm_init(enum ctm_output_mode output_mode, enum ctm_user_input_mode input_m
 
   Shortint_fifo_init(&(state->signalFifoState), SYMB_LEN+LENGTH_TONE_VEC);
   Shortint_fifo_init(&(state->baudotOutTTYCodeFifoState), state->baudotOutTTYCodeFifoLength);
-  Shortint_fifo_init(&(state->ctmOutTTYCodeFifoState),  20);
+  Shortint_fifo_init(&(state->ctmOutTTYCodeFifoState),  2);
   Shortint_fifo_init(&(state->ctmToBaudotFifoState),  4000);
   Shortint_fifo_init(&(state->baudotToCtmFifoState),  3);
 }
