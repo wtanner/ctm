@@ -159,6 +159,12 @@ void layer2_process_user_output(struct ctm_state *state)
       if (state->cntFramesSinceLastBypassFromCTM<maxShortint)
         state->cntFramesSinceLastBypassFromCTM++;
     }
+
+    else {
+      character = convertTTYcode2char(ttyCode);
+      if (write(state->userOutputFileFp, &character, 1) == -1)
+        errx(1, "error writing to text output file, file descriptor %d.", state->userOutputFileFp);
+    }
   }
   else
   {
@@ -176,15 +182,18 @@ void layer2_process_user_output(struct ctm_state *state)
 
   /* decide which user output we are and write it. */
   if(state->baudotWriteToFile) {
+#ifdef LSBFIRST
+    if (state->compat_mode)
+    {
+      /* The test pattern baudot PCM files are in big-endian. If we are on a little-endian machine, we will need to swap the bytes */
+      for (cnt=0; cnt<LENGTH_TONE_VEC; cnt++)
+      {
+        state->baudot_output_buffer[cnt] = swap16(state->baudot_output_buffer[cnt]);
+      }
+    }
+#endif
     if (write(state->userOutputFileFp, state->baudot_output_buffer, state->audio_buffer_size) == -1)
       errx(1, "error writing to baudot output file.");
-  }
-  /* otherwise we are writing to a text file */
-  else if ((Shortint_fifo_check(&(state->ctmToBaudotFifoState)) >0)) { 
-    Shortint_fifo_pop(&state->ctmToBaudotFifoState, &ttyCode, 1);
-    character = convertTTYcode2char(ttyCode);
-    if (write(state->userOutputFileFp, &character, 1) == -1)
-      errx(1, "error writing to text output file, file descriptor %d.", state->userOutputFileFp);
   }
 }
 
@@ -245,7 +254,7 @@ void layer2_process_ctm_file_output(struct ctm_state *state)
   }
 #endif
 
-  if (write(state->userOutputFileFp, state->ctm_output_buffer, state->audio_buffer_size) < state->audio_buffer_size)
+  if (write(state->ctmOutputFileFp, state->ctm_output_buffer, state->audio_buffer_size) < state->audio_buffer_size)
     errx(1, "layer2_process_ctm_in: write error.");
 }
 
@@ -274,40 +283,39 @@ static void layer2_process_ctm_in(struct ctm_state *state)
       state->enquiryFromFarEndDetected=true;
       state->cntFramesSinceEnquiryDetected=0;
     }
-
-    /* If there is a character from the CTM receiver available          */
-    /* --> print it on the screen and push it into the correct fifo.    */
-    if (Shortint_fifo_check(&(state->ctmOutTTYCodeFifoState)) >0)
-    {
-      Shortint_fifo_pop(&(state->ctmOutTTYCodeFifoState), &ucsCode, 1);
-
-      /* Check whether this was an enquiry burst from the other */
-      /* side. Ignore this enquiry, if the last enquiry has     */
-      /* been detected less than 25 frames (500 ms) ago.        */
-      if ((ucsCode==ENQU_SYMB) && 
-          (state->cntFramesSinceEnquiryDetected > 25*160/LENGTH_TONE_VEC))
-      {
-        state->enquiryFromFarEndDetected=true;
-        state->cntFramesSinceEnquiryDetected=0;
-      }
-      else
-      {
-        /* Convert character from UCS to Baudot code, print   */
-        /* it on the screen and push it into ctmToBaudotFifo. */ 
-        character = toupper(convertUCScode2char(ucsCode));
-        ttyCode   = convertChar2ttyCode(character);
-        if (ttyCode >= 0)
-        {
-          fprintf(stderr, "%c", character);
-          Shortint_fifo_push(&(state->ctmToBaudotFifoState), &ttyCode, 1);
-        }
-      }
-    }
-
-    if (state->cntFramesSinceEnquiryDetected<maxShortint)
-      state->cntFramesSinceEnquiryDetected++;
   }
 
+  /* If there is a character from the CTM receiver available          */
+  /* --> print it on the screen and push it into the correct fifo.    */
+  if (Shortint_fifo_check(&(state->ctmOutTTYCodeFifoState)) >0)
+  {
+    Shortint_fifo_pop(&(state->ctmOutTTYCodeFifoState), &ucsCode, 1);
+
+    /* Check whether this was an enquiry burst from the other */
+    /* side. Ignore this enquiry, if the last enquiry has     */
+    /* been detected less than 25 frames (500 ms) ago.        */
+    if ((ucsCode==ENQU_SYMB) && 
+        (state->cntFramesSinceEnquiryDetected > 25*160/LENGTH_TONE_VEC))
+    {
+      state->enquiryFromFarEndDetected=true;
+      state->cntFramesSinceEnquiryDetected=0;
+    }
+    else
+    {
+      /* Convert character from UCS to Baudot code, print   */
+      /* it on the screen and push it into ctmToBaudotFifo. */ 
+      character = toupper(convertUCScode2char(ucsCode));
+      ttyCode   = convertChar2ttyCode(character);
+      if (ttyCode >= 0)
+      {
+        fprintf(stderr, "%c", character);
+        Shortint_fifo_push(&(state->ctmToBaudotFifoState), &ttyCode, 1);
+      }
+    }
+  }
+
+  if (state->cntFramesSinceEnquiryDetected<maxShortint)
+    state->cntFramesSinceEnquiryDetected++;
 }
 
 static void layer2_process_ctm_out(struct ctm_state *state)
@@ -427,4 +435,6 @@ static void layer2_process_ctm_out(struct ctm_state *state)
 
   if (state->cntFramesSinceBurstInit<maxShortint)
     state->cntFramesSinceBurstInit++;
+
+  state->cntProcessedSamples += LENGTH_TONE_VEC;
 }

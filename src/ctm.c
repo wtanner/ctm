@@ -32,6 +32,7 @@ extern void layer2_process_ctm_audio_in(struct ctm_state *);
 extern void layer2_process_ctm_audio_out(struct ctm_state *);
 extern void layer2_process_ctm_file_input(struct ctm_state *);
 extern void layer2_process_ctm_file_output(struct ctm_state *);
+
 /* function prototypes */
 static void set_modes(enum ctm_output_mode, enum ctm_user_input_mode, int, int, int, int, char *);
 void open_audio_devices(void);
@@ -39,8 +40,14 @@ void ctm_set_negotiation(enum on_off);
 void ctm_init(enum ctm_output_mode, enum ctm_user_input_mode, int, int, int, int, char *);
 static void setup_poll_fds(struct pollfd *);
 int ctm_start(void);
+void ctm_set_num_samples(int);
 
 static struct ctm_state *state;
+
+void ctm_set_num_samples(int num_samples)
+{
+  state->numSamplesToProcess = num_samples;
+}
 
 static void set_modes(enum ctm_output_mode ctm_output_mode, enum ctm_user_input_mode input_mode, int ctm_output_fd, int ctm_input_fd, int user_output_fd, int user_input_fd, char *device_name)
 {
@@ -189,7 +196,7 @@ void ctm_init(enum ctm_output_mode output_mode, enum ctm_user_input_mode input_m
   state->actualBaudotCharDetected      = false;
   state->baudotOutTTYCodeFifoLength    = 50;
 
-  state->audio_buffer_size             = LENGTH_TONE_VEC;
+  state->audio_buffer_size             = LENGTH_TONE_VEC * sizeof(Shortint);
 
   /* initialize the audio buffers. */
   state->ctm_input_buffer = calloc(LENGTH_TONE_VEC, sizeof(Shortint));
@@ -225,7 +232,7 @@ void ctm_init(enum ctm_output_mode output_mode, enum ctm_user_input_mode input_m
 
   Shortint_fifo_init(&(state->signalFifoState), SYMB_LEN+LENGTH_TONE_VEC);
   Shortint_fifo_init(&(state->baudotOutTTYCodeFifoState), state->baudotOutTTYCodeFifoLength);
-  Shortint_fifo_init(&(state->ctmOutTTYCodeFifoState),  2);
+  Shortint_fifo_init(&(state->ctmOutTTYCodeFifoState),  20);
   Shortint_fifo_init(&(state->ctmToBaudotFifoState),  4000);
   Shortint_fifo_init(&(state->baudotToCtmFifoState),  3);
 }
@@ -301,17 +308,16 @@ int ctm_start(void)
       
       switch (index) {
         case 0:
-          if (pfds[index].revents & (POLLIN))
+          if ((pfds[index].revents & POLLIN) == POLLIN)
             layer2_process_user_input(state);
           break;
         case 1:
-          if (pfds[index].revents & (POLLOUT))
+          if ((pfds[index].revents & POLLOUT) == POLLOUT)
             layer2_process_user_output(state);
           break;
         case 2:
           if (state->ctm_audio_dev_mode) {
             if((sio_revents(state->audio_hdl, &pfds[2]) & POLLIN) == POLLIN) {
-              /* process audio in */
               layer2_process_ctm_audio_in(state);
             }
             if((sio_revents(state->audio_hdl, &pfds[2]) & POLLOUT) == POLLOUT) {
@@ -319,10 +325,12 @@ int ctm_start(void)
             }
           }
           else
-            layer2_process_ctm_file_input(state);
+            if ((pfds[index].revents & POLLIN) == POLLIN)
+              layer2_process_ctm_file_input(state);
           break;
         case 3:
-          if (pfds[index].revents & (POLLIN|POLLOUT))
+          if ((pfds[index].revents & POLLOUT) == POLLOUT)
+            /* debug */
             layer2_process_ctm_file_output(state);
           break;
         default:
@@ -330,5 +338,13 @@ int ctm_start(void)
           break;
       }
     }
+
+    /* conditions to break the loop */
+    if ((state->numSamplesToProcess > 0 && state->numSamplesToProcess <= state->cntProcessedSamples) ||
+        (state->baudotEOF && state->ctmEOF && state->ctmTransmitterIsIdle && (Shortint_fifo_check(&(state->ctmToBaudotFifoState)) == 0) &&
+        (state->numBaudotBitsStillToModulate == 0)))
+      break;
   }
+
+  return 0;
 }

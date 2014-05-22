@@ -121,6 +121,7 @@ int main(int argc, char** argv)
 {
   Shortint     cnt;
   int          optindex;
+  const char*  errstr;
 
   /* command-line argument flags and variables */
   int ctm_input_fd;
@@ -134,6 +135,7 @@ int main(int argc, char** argv)
   int audio_mode_flag;
   enum ctm_user_input_mode user_input_mode;
   enum ctm_output_mode ctm_mode;
+  int num_samples;
 
   writeHead();
 
@@ -147,9 +149,10 @@ int main(int argc, char** argv)
   negotiation_flag = 0;
   ctm_file_mode_flag = 0;
   audio_mode_flag = 1;
+  num_samples = -1; /* by default, set to infinite */
 
   int ch;
-  while ((ch = getopt(argc, argv, "cbni:o:f:I:O:")) != -1) {
+  while ((ch = getopt(argc, argv, "cbni:o:f:I:O:N:")) != -1) {
     switch (ch) {
       case 'c':
         compat_flag = 1;
@@ -168,13 +171,18 @@ int main(int argc, char** argv)
       case 'O':
         ctm_file_mode_flag = 1;
         audio_mode_flag = 0;
-        ctm_output_fd = open_file_or_stdio(optarg, O_WRONLY | O_NONBLOCK | O_CREAT);
+        ctm_output_fd = open_file_or_stdio(optarg, O_WRONLY | O_NONBLOCK | O_CREAT | O_TRUNC);
         break;
       case 'i':
         user_input_fd = open_file_or_stdio(optarg, O_RDONLY | O_NONBLOCK);
         break;
       case 'o':
-        user_output_fd = open_file_or_stdio(optarg, O_WRONLY | O_NONBLOCK | O_CREAT);
+        user_output_fd = open_file_or_stdio(optarg, O_WRONLY | O_NONBLOCK | O_CREAT | O_TRUNC);
+        break;
+      case 'N':
+        num_samples = strtonum(optarg, 1, ULONG_MAX, &errstr); 
+        if (errstr)
+          errx(1, "number of samples is %s: %s", errstr, optarg);
         break;
       default:
         usage();
@@ -219,6 +227,7 @@ int main(int argc, char** argv)
 
   ctm_init(ctm_mode, user_input_mode, ctm_output_fd, ctm_input_fd, user_output_fd, user_input_fd, SIO_DEVANY);
   ctm_set_negotiation(negotiation_flag);
+  ctm_set_num_samples(num_samples);
   ctm_start();
 
   exit(0);

@@ -62,9 +62,9 @@ echo "Execute adaptation module #1 (first pass)            "
 echo "====================================================="
 
 solaris/adaptation_switch  \
-   -baudotin patterns/baudot.pcm        -ctmin     patterns/zeros4000.pcm \
-   -ctmout   output/ctm_forward1.pcm  -baudotout /dev/null \
-   -numsamples 100000 -compat
+   -b -i patterns/baudot.pcm -I patterns/zeros4000.pcm \
+   -O output/ctm_forward1.pcm  -o /dev/null \
+   -c -N 100000
 
 ###########################################################################
 # Execute the adaptation module #2 for the first time.
@@ -76,8 +76,8 @@ echo "Execute adaptation module #2 (first pass)            "
 echo "====================================================="
 
 solaris/adaptation_switch  \
-   -baudotin patterns/zeros4000.pcm      -ctmin     output/ctm_forward1.pcm \
-   -ctmout   output/ctm_backward1.pcm  -baudotout /dev/null -compat
+   -b -i patterns/zeros4000.pcm  -I output/ctm_forward1.pcm \
+   -O output/ctm_backward1.pcm  -o /dev/null -c
 
 ###########################################################################
 # Execute the adaptation module #1 for the second time. With this second
@@ -91,8 +91,8 @@ echo "Execute adaptation module #1 (second pass)           "
 echo "====================================================="
 
 solaris/adaptation_switch  \
-   -baudotin patterns/baudot.pcm        -ctmin output/ctm_backward1.pcm \
-   -ctmout   output/ctm_forward2.pcm  -baudotout /dev/null -compat
+   -b -i patterns/baudot.pcm  -I output/ctm_backward1.pcm \
+   -O output/ctm_forward2.pcm -o /dev/null -c
 
 ###########################################################################
 # Execute the adaptation module #2 for the second time. With this run,
@@ -106,10 +106,8 @@ echo "Execute adaptation module #2 (second pass)           "
 echo "====================================================="
 
 solaris/adaptation_switch  \
-   -baudotin patterns/zeros4000.pcm      -ctmin     output/ctm_forward2.pcm \
-   -ctmout   output/ctm_backward2.pcm  -baudotout output/baudot_out.pcm \
-   -textout  output/decoded.txt -compat
-
+   -b -i patterns/zeros4000.pcm -I output/ctm_forward2.pcm \
+   -O output/ctm_backward2.pcm -o output/baudot_out.pcm -c
 
 ###########################################################################
 # Now we try to decode the signal baudot_out.pcm. The text shall be
@@ -123,10 +121,9 @@ echo "shall be decoded completely now..."
 echo "===================================================================="
 
 solaris/adaptation_switch  \
-   -baudotin output/baudot_out.pcm  -ctmin     patterns/zeros4000.pcm \
-   -ctmout   /dev/null               -baudotout /dev/null \
-   -nonegotiation -compat
-
+   -b -i output/baudot_out.pcm -I patterns/zeros4000.pcm \
+   -O /dev/null -o /dev/null \
+   -nc
 
 ###########################################################################
 # Now we do a test to confirm that the regenerated Baudot signal does not
@@ -141,8 +138,6 @@ echo "No CTM burst shall be detected now..."
 echo "====================================================================="
 
 solaris/adaptation_switch  \
-   -baudotin patterns/zeros4000.pcm  -ctmin   output/baudot_out.pcm \
-   -ctmout   /dev/null              -baudotout /dev/null \
-   -nonegotiation -compat
-
-
+   -b -i patterns/zeros4000.pcm -I output/baudot_out.pcm \
+   -O /dev/null -o /dev/null \
+   -nc

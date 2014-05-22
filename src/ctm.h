@@ -134,5 +134,6 @@ enum on_off {
 void ctm_init(enum ctm_output_mode output_mode, enum ctm_user_input_mode input_mode, int, int, int, int, char *);
 void ctm_set_negotiation(enum on_off);
 int ctm_start(void);
+void ctm_set_num_samples(int);
 
 #endif
