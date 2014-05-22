@@ -39,7 +39,6 @@ void layer2_process_ctm_file_input(struct ctm_state *);
 void layer2_process_ctm_file_output(struct ctm_state *);
 static void layer2_process_ctm_out(struct ctm_state *);
 
-
 void layer2_process_user_input(struct ctm_state *state)
 {
   if (state->baudotReadFromFile)

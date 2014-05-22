@@ -61,7 +61,7 @@ echo "====================================================="
 echo "Execute adaptation module #1 (first pass)            "
 echo "====================================================="
 
-solaris/adaptation_switch  \
+openbsd/ctm\
    -b -i patterns/baudot.pcm -I patterns/zeros4000.pcm \
    -O output/ctm_forward1.pcm  -o /dev/null \
    -c -N 100000
@@ -75,7 +75,7 @@ echo "====================================================="
 echo "Execute adaptation module #2 (first pass)            "
 echo "====================================================="
 
-solaris/adaptation_switch  \
+openbsd/ctm \
    -b -i patterns/zeros4000.pcm  -I output/ctm_forward1.pcm \
    -O output/ctm_backward1.pcm  -o /dev/null -c
 
@@ -90,7 +90,7 @@ echo "====================================================="
 echo "Execute adaptation module #1 (second pass)           "
 echo "====================================================="
 
-solaris/adaptation_switch  \
+openbsd/ctm  \
    -b -i patterns/baudot.pcm  -I output/ctm_backward1.pcm \
    -O output/ctm_forward2.pcm -o /dev/null -c
 
@@ -105,7 +105,7 @@ echo "====================================================="
 echo "Execute adaptation module #2 (second pass)           "
 echo "====================================================="
 
-solaris/adaptation_switch  \
+openbsd/ctm  \
    -b -i patterns/zeros4000.pcm -I output/ctm_forward2.pcm \
    -O output/ctm_backward2.pcm -o output/baudot_out.pcm -c
 
@@ -120,7 +120,7 @@ echo "Now we try to decode the regenerated Baudot signal. The text message"
 echo "shall be decoded completely now..."
 echo "===================================================================="
 
-solaris/adaptation_switch  \
+openbsd/ctm  \
    -b -i output/baudot_out.pcm -I patterns/zeros4000.pcm \
    -O /dev/null -o /dev/null \
    -nc
@@ -137,7 +137,7 @@ echo "Testing whether the regenerated Baudot signal is free of CTM headers."
 echo "No CTM burst shall be detected now..."
 echo "====================================================================="
 
-solaris/adaptation_switch  \
+openbsd/ctm  \
    -b -i patterns/zeros4000.pcm -I output/baudot_out.pcm \
    -O /dev/null -o /dev/null \
    -nc

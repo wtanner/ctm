@@ -28,7 +28,7 @@
 # 
 ###############################################################################
 
-OSTYPE = solaris
+OSTYPE = openbsd
 MODE=NORM
 
 #
@@ -104,7 +104,7 @@ $(OSTYPE)/%.o: %.c ctm_defines.h init_interleaver.h  Makefile  $(OSTYPE)
 #
 
 $(OSTYPE)/adaptation_switch: $(OSTYPE)/adaptation_switch.o $(DSPMODULES_OBJ) $(AUIDOMODULES_OBJ) $(MODULE_OBJECTS)  Makefile  $(OSTYPE)
-	$(CC) -o $@  $(CFLAGS)  $< $(MODULE_OBJECTS)  $(LDFLAGS)
+	$(CC) -o $(OSTYPE)/ctm  $(CFLAGS)  $< $(MODULE_OBJECTS)  $(LDFLAGS)
 
 # rules how to make platform-dependent target directory
 #

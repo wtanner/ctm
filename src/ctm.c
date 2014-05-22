@@ -251,7 +251,9 @@ static void setup_poll_fds(struct pollfd *pfds)
   if (!state->baudotEOF)
     pfds[0].events = POLLIN;
   else
+  {
     pfds[0].events = 0;
+  }
 
   if (state->ctm_audio_dev_mode) {
     if (sio_pollfd(state->audio_hdl, &pfds[1], POLLIN|POLLOUT) != 1)
@@ -290,6 +292,7 @@ int ctm_start(void)
    */
   for(;;) {
     setup_poll_fds(pfds);
+
     r_nfds = poll(pfds, nfds, INFTIM);
 
     if (r_nfds == -1)
