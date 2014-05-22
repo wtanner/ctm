@@ -50,7 +50,7 @@
 #include <err.h>
 #include <fcntl.h>
 #include <unistd.h>
-#include <ctype.h>      /* toupper() */
+#include <ctype.h>
 #include <termios.h>
 
 #ifdef __OpenBSD__
@@ -62,35 +62,9 @@
 
 /***********************************************************************/
 
-void writeHead()
-{
-  fprintf(stderr, "\n");
-  fprintf(stderr, "********************************************************************\n");
-  fprintf(stderr, "  Cellular Text Telephone Modem (CTM) - Example Implementation for  \n");
-  fprintf(stderr, "  Conversion between CTM and Baudot Code (use option -h for help)   \n");
-  fprintf(stderr, "********************************************************************\n\n");
-}
-
-/***********************************************************************/
-
 void usage()
 {
-  fprintf(stderr, "                     +------------+                 \n");
-  fprintf(stderr, "  Baudot Tones  ---> |            | ---> CTM signal \n");
-  fprintf(stderr, "                     | adaptation |                 \n");
-  fprintf(stderr, "  Baudot Tones  <--- |            | <--- CTM signal \n");
-  fprintf(stderr, "                     +------------+                 \n");
-  fprintf(stderr, "use: ctm [ arguments ]\n");
-  fprintf(stderr, "  -ctmin      <input_file>   input file with CTM signal \n");
-  fprintf(stderr, "  -ctmout     <output_file>  output file for CTM signal \n");
-  fprintf(stderr, "  -baudotin   <input_file>   input file with Baudot Tones \n");
-  fprintf(stderr, "  -baudotout  <output_file>  output file for Baudot Tones \n");
-  fprintf(stderr, "  -textout    <text_file>    output text file from CTM receiver (optional)\n");
-  fprintf(stderr, "  -textin     <text_file>    input text file to CTM transmitter (optional)\n");
-  fprintf(stderr, "  -numsamples <number>       number of samples to process (optional)\n");
-  fprintf(stderr, "  -nonegotiation             disables the negotiation (optional)\n");
-  fprintf(stderr, "  -nobypass                  disables the signal bypass (optional)\n");
-  fprintf(stderr, "  -compat                     enables compatibility mode with 3GPP test files (optional)\n\n");
+  fprintf(stderr, "usage: ctm [-cbn]\n\t[-i file] [-o file] [-I file]\n\t[-O file] [-f device] [-N number]\n");
   exit(1);
 }
 
@@ -136,8 +110,6 @@ int main(int argc, char** argv)
   enum ctm_user_input_mode user_input_mode;
   enum ctm_output_mode ctm_mode;
   int num_samples;
-
-  writeHead();
 
   /* set default behavior */
   user_input_fd = STDIN_FILENO;
@@ -229,6 +201,8 @@ int main(int argc, char** argv)
   ctm_set_negotiation(negotiation_flag);
   ctm_set_num_samples(num_samples);
   ctm_start();
+
+  /* if in audio mode, this will never return. User must signal process to stop. */
 
   exit(0);
 }

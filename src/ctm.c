@@ -28,7 +28,6 @@
 extern void layer2_process_user_input(struct ctm_state *);
 extern void layer2_process_user_output(struct ctm_state *);
 extern void layer2_process_ctm_audio_in(struct ctm_state *);
-extern void layer2_process_ctm_audio_in(struct ctm_state *);
 extern void layer2_process_ctm_audio_out(struct ctm_state *);
 extern void layer2_process_ctm_file_input(struct ctm_state *);
 extern void layer2_process_ctm_file_output(struct ctm_state *);
@@ -246,7 +245,7 @@ static void setup_poll_fds(struct pollfd *pfds)
 
   pfds[0].fd = state->userInputFileFp;
 
-  /* if we have already hit an EOF condition on the input file, stop polling. 
+  /* if we have already hit an EOF condition on the input, stop polling. 
    * This avoids high cpu usage.
    * */
   if (!state->baudotEOF)
