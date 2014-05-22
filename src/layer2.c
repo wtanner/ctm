@@ -63,54 +63,54 @@ void layer2_process_user_input(struct ctm_state *state)
         }
       }
 #endif
-    }
 
-    /* Run the Baudot demodulator */
-    baudot_tonedemod(state->baudot_input_buffer, LENGTH_TONE_VEC, 
-        &(state->baudotOutTTYCodeFifoState), &(state->baudot_tonedemod_state));
-    /* Adjust the Mode of the modulator according to the demodulator */
-    state->baudot_tonemod_state.inFigureMode = state->baudot_tonedemod_state.inFigureMode;
+      /* Run the Baudot demodulator */
+      baudot_tonedemod(state->baudot_input_buffer, LENGTH_TONE_VEC, 
+          &(state->baudotOutTTYCodeFifoState), &(state->baudot_tonedemod_state));
+      /* Adjust the Mode of the modulator according to the demodulator */
+      state->baudot_tonemod_state.inFigureMode = state->baudot_tonedemod_state.inFigureMode;
 
-    /* Set flag indicating that the demodulator has already */
-    /* decoded a Baudot character.                          */ 
-    if(Shortint_fifo_check(&(state->baudotOutTTYCodeFifoState))>0)
-      state->baudotAlreadyReceived = true;
+      /* Set flag indicating that the demodulator has already */
+      /* decoded a Baudot character.                          */ 
+      if(Shortint_fifo_check(&(state->baudotOutTTYCodeFifoState))>0)
+        state->baudotAlreadyReceived = true;
 
-    /* Determine wheter the demodulator has detected that a Baudot */
-    /* character is actually received. This decision must be made  */
-    /* before the complete character has been received so that the */
-    /* original audio signal can be muted before a successive      */
-    /* Baudot detector is able to decode this character. We        */
-    /* make this decision after receiving the start bit and the    */
-    /* five information bits completely. However, for the          */
-    /* first character, we postulate additionally, that at least   */
-    /* one information bit is +1 (1400 Hz). Since the start bit    */
-    /* is always zero, this decision rule requires a transition    */
-    /* from 1800 Hz to 1400 Hz, which reduces the danger of false  */
-    /* alarms for pure voice calls. Since every Baudot             */
-    /* transmission shall start with a SHIFT symbol, this          */
-    /* assumption (at least one bit has to be +1) is fulfilled     */
-    /* for every Baudot transmission.                              */
+      /* Determine wheter the demodulator has detected that a Baudot */
+      /* character is actually received. This decision must be made  */
+      /* before the complete character has been received so that the */
+      /* original audio signal can be muted before a successive      */
+      /* Baudot detector is able to decode this character. We        */
+      /* make this decision after receiving the start bit and the    */
+      /* five information bits completely. However, for the          */
+      /* first character, we postulate additionally, that at least   */
+      /* one information bit is +1 (1400 Hz). Since the start bit    */
+      /* is always zero, this decision rule requires a transition    */
+      /* from 1800 Hz to 1400 Hz, which reduces the danger of false  */
+      /* alarms for pure voice calls. Since every Baudot             */
+      /* transmission shall start with a SHIFT symbol, this          */
+      /* assumption (at least one bit has to be +1) is fulfilled     */
+      /* for every Baudot transmission.                              */
 
-    //fprintf(stderr, "%d,", baudot_tonedemod_state.cntBitsActualChar);
+      //fprintf(stderr, "%d,", baudot_tonedemod_state.cntBitsActualChar);
 
-    if (state->baudot_tonedemod_state.cntBitsActualChar>=5)
-    {
-      if (state->baudotAlreadyReceived)
-        state->actualBaudotCharDetected = true;
+      if (state->baudot_tonedemod_state.cntBitsActualChar>=5)
+      {
+        if (state->baudotAlreadyReceived)
+          state->actualBaudotCharDetected = true;
+        else
+          state->actualBaudotCharDetected = (state->baudot_tonedemod_state.ttyCode>0);
+      }
       else
-        state->actualBaudotCharDetected = (state->baudot_tonedemod_state.ttyCode>0);
-    }
-    else
-      state->actualBaudotCharDetected = false;
+        state->actualBaudotCharDetected = false;
 
-    /* The next lines guarantee that the Baudot signal is muted even */
-    /* if the received character is a SHIFT symbol (a SHIFT symbol   */
-    /* would not set the CTM transmitter into an active state).      */ 
-    if (state->cntHangoverFramesForMuteBaudot>0) 
-      state->cntHangoverFramesForMuteBaudot--;
-    if (state->actualBaudotCharDetected)
-      state->cntHangoverFramesForMuteBaudot = 1+(320/LENGTH_TONE_VEC);
+      /* The next lines guarantee that the Baudot signal is muted even */
+      /* if the received character is a SHIFT symbol (a SHIFT symbol   */
+      /* would not set the CTM transmitter into an active state).      */ 
+      if (state->cntHangoverFramesForMuteBaudot>0) 
+        state->cntHangoverFramesForMuteBaudot--;
+      if (state->actualBaudotCharDetected)
+        state->cntHangoverFramesForMuteBaudot = 1+(320/LENGTH_TONE_VEC);
+    }
   }
 
   else {
@@ -146,7 +146,7 @@ void layer2_process_user_output(struct ctm_state *state)
     /* --> pop the character from the fifo.                         */
     if ((Shortint_fifo_check(&(state->ctmToBaudotFifoState)) >0) &&
         (((state->numBaudotBitsStillToModulate <= 8) &&
-        (state->cntFramesSinceLastBypassFromCTM>=10*160/LENGTH_TONE_VEC)) || state->writeToTextFile))
+          (state->cntFramesSinceLastBypassFromCTM>=10*160/LENGTH_TONE_VEC)) || state->writeToTextFile))
       Shortint_fifo_pop(&state->ctmToBaudotFifoState, &ttyCode, 1);
     else
       ttyCode = -1;
@@ -219,26 +219,29 @@ void layer2_process_ctm_audio_out(struct ctm_state *state)
 
 void layer2_process_ctm_file_input(struct ctm_state *state)
 {
-  if(read(state->ctmInputFileFp, state->ctm_input_buffer, state->audio_buffer_size) < state->audio_buffer_size) 
+  if (!state->ctmEOF)
   {
-    /* if EOF is reached, use buffer with zeros instead */
-    state->ctmEOF = true;
-    for (cnt=0; cnt<LENGTH_TONE_VEC; cnt++)
-      state->ctm_input_buffer[cnt]=0;
-  }
+    if(read(state->ctmInputFileFp, state->ctm_input_buffer, state->audio_buffer_size) < state->audio_buffer_size) 
+    {
+      /* if EOF is reached, use buffer with zeros instead */
+      state->ctmEOF = true;
+      for (cnt=0; cnt<LENGTH_TONE_VEC; cnt++)
+        state->ctm_input_buffer[cnt]=0;
+    }
 
 #ifdef LSBFIRST
-  if (state->compat_mode)
-  {
-    /* The test pattern baudot PCM files are in big-endian. If we are on a little-endian machine, we will need to swap the bytes */
-    for (cnt=0; cnt<LENGTH_TONE_VEC; cnt++)
+    if (state->compat_mode)
     {
-      state->ctm_input_buffer[cnt] = swap16(state->ctm_input_buffer[cnt]);
+      /* The test pattern baudot PCM files are in big-endian. If we are on a little-endian machine, we will need to swap the bytes */
+      for (cnt=0; cnt<LENGTH_TONE_VEC; cnt++)
+      {
+        state->ctm_input_buffer[cnt] = swap16(state->ctm_input_buffer[cnt]);
+      }
     }
-  }
 #endif
 
-  layer2_process_ctm_in(state);
+    layer2_process_ctm_in(state);
+  }
 }
 
 void layer2_process_ctm_file_output(struct ctm_state *state)

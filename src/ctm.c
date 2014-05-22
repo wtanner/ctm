@@ -37,7 +37,7 @@ static void set_modes(enum ctm_output_mode, enum ctm_user_input_mode, int, int, 
 void open_audio_devices(void);
 void ctm_set_negotiation(enum on_off);
 void ctm_init(enum ctm_output_mode, enum ctm_user_input_mode, int, int, int, int, char *);
-static void setup_poll_fds(struct pollfd *);
+static int setup_poll_fds(struct pollfd *, int);
 int ctm_start(void);
 void ctm_set_num_samples(int);
 
@@ -236,14 +236,17 @@ void ctm_init(enum ctm_output_mode output_mode, enum ctm_user_input_mode input_m
   Shortint_fifo_init(&(state->baudotToCtmFifoState),  3);
 }
 
-static void setup_poll_fds(struct pollfd *pfds)
+static int setup_poll_fds(struct pollfd *pfds, int nfds)
 {
   /* setup POLL structs:
    * 0 = user input (baudot or text)
    * 1 = ctm input OR ctm audio
    */
 
-  pfds[0].fd = state->userInputFileFp;
+  int active_nfds = nfds;
+
+  if (nfds > 0)
+    pfds[0].fd = state->userInputFileFp;
 
   /* if we have already hit an EOF condition on the input, stop polling. 
    * This avoids high cpu usage.
@@ -253,12 +256,29 @@ static void setup_poll_fds(struct pollfd *pfds)
   else
   {
     pfds[0].events = 0;
+    active_nfds -= 1;
   }
 
-  if (state->ctm_audio_dev_mode) {
+  if (state->ctmReadFromFile && nfds > 1)
+  {
+    if(state->ctmEOF) {
+      /* stop polling at CTM EOF. */
+      pfds[1].events = 0;
+      active_nfds -= 1;
+    }
+    else
+    {
+      pfds[1].events = POLLIN;
+      pfds[1].fd = state->ctmInputFileFp;
+    }
+  }
+
+  if (state->ctm_audio_dev_mode && nfds > 1) {
     if (sio_pollfd(state->audio_hdl, &pfds[1], POLLIN|POLLOUT) != 1)
       errx(1, "unable to setup audio device polling.");
   }
+
+  return active_nfds;
 }
 
 int ctm_start(void)
@@ -267,6 +287,7 @@ int ctm_start(void)
   int nfds;
   int r_nfds;
   int index;
+  int active_nfds;
 
   nfds = 2;
 
@@ -291,36 +312,39 @@ int ctm_start(void)
    * Main processing loop
    */
   for(;;) {
-    setup_poll_fds(pfds);
+    active_nfds = setup_poll_fds(pfds, nfds);
 
-    r_nfds = poll(pfds, nfds, INFTIM);
+    if (active_nfds > 0)
+    {
+      r_nfds = poll(pfds, nfds, INFTIM);
 
-    if (r_nfds == -1)
-      err(1, "ctm_start: polling error");
+      if (r_nfds == -1)
+        err(1, "ctm_start: polling error");
 
-    for (index=0; index < nfds; index++) {
+      for (index=0; index < nfds; index++) {
 
-      switch (index) {
-        case 0:
-          if ((pfds[index].revents & POLLIN) == POLLIN)
-            layer2_process_user_input(state);
-          break;
-        case 1:
-          if (state->ctm_audio_dev_mode) {
-            if((sio_revents(state->audio_hdl, &pfds[index]) & POLLIN) == POLLIN) {
-              layer2_process_ctm_audio_in(state);
-            }
-            if((sio_revents(state->audio_hdl, &pfds[index]) & POLLOUT) == POLLOUT) {
-              layer2_process_ctm_audio_out(state);
-            }
-          }
-          else
+        switch (index) {
+          case 0:
             if ((pfds[index].revents & POLLIN) == POLLIN)
-              layer2_process_ctm_file_input(state);
-          break;
-        default:
-          errx(1, "ctm_start: invalid pollfd index.");
-          break;
+              layer2_process_user_input(state);
+            break;
+          case 1:
+            if (state->ctm_audio_dev_mode) {
+              if((sio_revents(state->audio_hdl, &pfds[index]) & POLLIN) == POLLIN) {
+                layer2_process_ctm_audio_in(state);
+              }
+              if((sio_revents(state->audio_hdl, &pfds[index]) & POLLOUT) == POLLOUT) {
+                layer2_process_ctm_audio_out(state);
+              }
+            }
+            else
+              if ((pfds[index].revents & POLLIN) == POLLIN)
+                layer2_process_ctm_file_input(state);
+            break;
+          default:
+            errx(1, "ctm_start: invalid pollfd index.");
+            break;
+        }
       }
     }
 
