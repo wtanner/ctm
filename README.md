@@ -21,9 +21,11 @@ The ctm program has two primary modes of operation: text input and baudot input.
 
 Called with no arguments, ctm will read text input from stdin, write text output to stdout, and use the default audio device on the system for CTM communications.
 
-By default, ctm will use the default audio device to transmit and receive CTM signals. This behavior can be changed by using the "-ctmdevice" option.
+By default, ctm will use the default audio device to transmit and receive CTM signals. This behavior can be changed by using the "-f" option.
 
 If CTM input and/or output file are specified, the sound device will not be used, and all CTM transmissions and receptions will go through the specified files. Note that these files can be stdin/stdout, audio devices, FIFOs (see mkfifo(1)), /dev/null, etc.
+
+usage: ctm [-cbn]\n\t[-i file] [-o file] [-I file] [-O file] [-f device] [-N number]
 
 Text mode:
                      +------------+                
@@ -40,17 +42,14 @@ Baudot mode:
                      +------------+                
 
 use: %s [ arguments ]
-  -ctmin      <input_file>   input file with CTM signal (optional)
-  -ctmout     <output_file>  output file for CTM signal (optional)
-  -baudotin   <input_file>   input file with Baudot Tones (optional)
-  -baudotout  <output_file>  output file for Baudot Tones (optional)
-  -textout    <text_file>    output text file from CTM receiver (optional)
-  -textin     <text_file>    input text file to CTM transmitter (optional)
-  -numsamples <number>       number of samples to process (optional)
-  -nonegotiation             disables the negotiation (optional)
-  -nobypass                  disables the signal bypass (optional)
-  -compat                     enables compatibility mode with 3GPP test files (optional)
-  -ctmdevice <device_name>   audio device to use for CTM signals (optional)
+  -I [input_file]  input file with CTM signal (optional)
+  -O [output_file] output file for CTM signal (optional)
+  -i [input_file]  input file with text or baudot tones (optional)
+  -o [output_file] output file for text or baudot tones (optional)
+  -N [number]      number of samples to process (optional)
+  -n               disables enquiry negotiation (optional)
+  -c               enables compatibility mode with 3GPP test files (optional)
+  -f [device]      audio device to use for CTM signals (optional)
 
 Examples
 ===
@@ -59,10 +58,10 @@ Examples
 
 Reads from stdin and writes to stdout. The CTM modem communicates via the default audio device.
 
-2> ctm -nonegotiation -textout - -textin -
+2> ctm -n -i - -o -
 
 The same as running 1, but does not do ENQUIRY handshaking.
 
-3> ctm -textin file1.txt -textout file2.txt -ctmdevice snd/0
+3> ctm -i file1.txt -o file2.txt -f snd/0
 
 Use "snd/0" as the CTM modem audio communication device, reading text input from file1.txt and writing text output to file2.txt.
