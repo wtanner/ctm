@@ -40,12 +40,21 @@ void ctm_init(enum ctm_output_mode, enum ctm_user_input_mode, int, int, int, int
 static int setup_poll_fds(struct pollfd *, int);
 int ctm_start(void);
 void ctm_set_num_samples(int);
+void ctm_set_shutdown_on_eof(int);
 
 static struct ctm_state *state;
 
 void ctm_set_num_samples(int num_samples)
 {
   state->numSamplesToProcess = num_samples;
+}
+
+void ctm_set_shutdown_on_eof(int flag)
+{
+  if(flag == 1)
+    state->shutdown_on_eof = true;
+  else
+    state->shutdown_on_eof = false;
 }
 
 static void set_modes(enum ctm_output_mode ctm_output_mode, enum ctm_user_input_mode input_mode, int ctm_output_fd, int ctm_input_fd, int user_output_fd, int user_input_fd, char *device_name)
@@ -358,6 +367,9 @@ int ctm_start(void)
     if ((state->numSamplesToProcess > 0 && state->numSamplesToProcess <= state->cntProcessedSamples) ||
         (state->baudotEOF && state->ctmEOF && state->ctmTransmitterIsIdle && (Shortint_fifo_check(&(state->ctmToBaudotFifoState)) == 0) &&
          (state->numBaudotBitsStillToModulate == 0)))
+      break;
+    /* break on user text input EOF, if desired. */
+    if (state->shutdown_on_eof && state->baudotEOF && state->ctmTransmitterIsIdle && (Shortint_fifo_check(&(state->ctmToBaudotFifoState)) == 0))
       break;
   }
 

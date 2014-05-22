@@ -107,6 +107,8 @@ int main(int argc, char** argv)
   int negotiation_flag;
   int ctm_file_mode_flag;
   int audio_mode_flag;
+  int shutdown_on_eof_flag;
+
   enum ctm_user_input_mode user_input_mode;
   enum ctm_output_mode ctm_mode;
   int num_samples;
@@ -122,10 +124,13 @@ int main(int argc, char** argv)
   ctm_file_mode_flag = 0;
   audio_mode_flag = 1;
   num_samples = -1; /* by default, set to infinite */
+  shutdown_on_eof_flag = 0;
 
   int ch;
-  while ((ch = getopt(argc, argv, "cbni:o:f:I:O:N:")) != -1) {
+  while ((ch = getopt(argc, argv, "scbni:o:f:I:O:N:")) != -1) {
     switch (ch) {
+      case 's':
+        shutdown_on_eof_flag = 1;
       case 'c':
         compat_flag = 1;
         break;
@@ -199,6 +204,7 @@ int main(int argc, char** argv)
 
   ctm_init(ctm_mode, user_input_mode, ctm_output_fd, ctm_input_fd, user_output_fd, user_input_fd, SIO_DEVANY);
   ctm_set_negotiation(negotiation_flag);
+  ctm_set_shutdown_on_eof(shutdown_on_eof_flag);
   ctm_set_num_samples(num_samples);
   ctm_start();
 

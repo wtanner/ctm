@@ -56,6 +56,7 @@ struct ctm_state {
 
     Bool         compat_mode;
     Bool         ctm_audio_dev_mode; /* by default, we will use the "default" system audio device for CTM I/O. */
+    Bool         shutdown_on_eof;
   
     tx_state_t   tx_state;
     rx_state_t   rx_state;
@@ -135,5 +136,6 @@ void ctm_init(enum ctm_output_mode output_mode, enum ctm_user_input_mode input_m
 void ctm_set_negotiation(enum on_off);
 int ctm_start(void);
 void ctm_set_num_samples(int);
+void ctm_set_shutdown_on_eof(int);
 
 #endif

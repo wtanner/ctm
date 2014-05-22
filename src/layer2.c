@@ -117,10 +117,12 @@ void layer2_process_user_input(struct ctm_state *state)
     /* otherwise we are reading text input */
     if (Shortint_fifo_check(&(state->baudotOutTTYCodeFifoState)) < state->baudotOutTTYCodeFifoLength)
     {
+
       if (read(state->userInputFileFp, &character, 1) < 1)
       {
         /* reuse baudot EOF flag to tell the program no more input */
         state->baudotEOF = true;
+
       }
       else {
         ttyCode = convertChar2ttyCode(character);
