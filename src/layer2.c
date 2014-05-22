@@ -118,11 +118,15 @@ void layer2_process_user_input(struct ctm_state *state)
     /* otherwise we are reading text input */
     if (Shortint_fifo_check(&(state->baudotOutTTYCodeFifoState)) < state->baudotOutTTYCodeFifoLength)
     {
-      if (read(state->userInputFileFp, &character, 1) == -1)
-        err(1, "error reading from user input file");
-
-      ttyCode = convertChar2ttyCode(character);
-      Shortint_fifo_push(&(state->baudotOutTTYCodeFifoState), &ttyCode, 1);
+      if (read(state->userInputFileFp, &character, 1) < 1)
+      {
+        /* reuse baudot EOF flag to tell the program no more input */
+        state->baudotEOF = true;
+      }
+      else {
+        ttyCode = convertChar2ttyCode(character);
+        Shortint_fifo_push(&(state->baudotOutTTYCodeFifoState), &ttyCode, 1);
+      }
     }
   }
 } 
@@ -254,7 +258,7 @@ void layer2_process_ctm_file_output(struct ctm_state *state)
 #endif
 
   if (write(state->ctmOutputFileFp, state->ctm_output_buffer, state->audio_buffer_size) < state->audio_buffer_size)
-    errx(1, "layer2_process_ctm_in: write error.");
+    errx(1, "layer2_process_ctm_file_output: write error.");
 }
 
 static void layer2_process_ctm_in(struct ctm_state *state)

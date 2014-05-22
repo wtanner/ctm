@@ -241,25 +241,22 @@ static void setup_poll_fds(struct pollfd *pfds)
 {
   /* setup POLL structs:
    * 0 = user input (baudot or text)
-   * 1 = user output (baudot or text)
-   * 2 = ctm input OR ctm audio
-   * 3 = ctm output
+   * 1 = ctm input OR ctm audio
    */
 
   pfds[0].fd = state->userInputFileFp;
-  pfds[1].fd = state->userOutputFileFp;
-  pfds[0].events = POLLIN;
-  pfds[1].events = POLLOUT;
+
+  /* if we have already hit an EOF condition on the input file, stop polling. 
+   * This avoids high cpu usage.
+   * */
+  if (!state->baudotEOF)
+    pfds[0].events = POLLIN;
+  else
+    pfds[0].events = 0;
 
   if (state->ctm_audio_dev_mode) {
-    if (sio_pollfd(state->audio_hdl, &pfds[2], POLLIN|POLLOUT) != 1)
+    if (sio_pollfd(state->audio_hdl, &pfds[1], POLLIN|POLLOUT) != 1)
       errx(1, "unable to setup audio device polling.");
-  }
-  else {
-    pfds[2].fd = state->ctmInputFileFp;
-    pfds[3].fd = state->ctmOutputFileFp;
-    pfds[2].events = POLLIN;
-    pfds[3].events = POLLOUT;
   }
 }
 
@@ -270,13 +267,10 @@ int ctm_start(void)
   int r_nfds;
   int index;
 
-  if (state->ctm_audio_dev_mode)
-    nfds = 3;
-  else
-    nfds = 4;
+  nfds = 2;
 
   if ((pfds = calloc(nfds, sizeof(struct pollfd))) == NULL)
-    err(1, "pfds == NULL.");
+    err(1, "ctm_start: pfds == NULL");
 
   if (state->ctm_audio_dev_mode)
   {
@@ -292,8 +286,6 @@ int ctm_start(void)
   if (state->disableNegotiation)
     state->ctmFromFarEndDetected = true;
 
-  setup_poll_fds(pfds);
-
   /*
    * Main processing loop
    */
@@ -303,24 +295,20 @@ int ctm_start(void)
 
     if (r_nfds == -1)
       err(1, "ctm_start: polling error");
-    
+
     for (index=0; index < nfds; index++) {
-      
+
       switch (index) {
         case 0:
           if ((pfds[index].revents & POLLIN) == POLLIN)
             layer2_process_user_input(state);
           break;
         case 1:
-          if ((pfds[index].revents & POLLOUT) == POLLOUT)
-            layer2_process_user_output(state);
-          break;
-        case 2:
           if (state->ctm_audio_dev_mode) {
-            if((sio_revents(state->audio_hdl, &pfds[2]) & POLLIN) == POLLIN) {
+            if((sio_revents(state->audio_hdl, &pfds[index]) & POLLIN) == POLLIN) {
               layer2_process_ctm_audio_in(state);
             }
-            if((sio_revents(state->audio_hdl, &pfds[2]) & POLLOUT) == POLLOUT) {
+            if((sio_revents(state->audio_hdl, &pfds[index]) & POLLOUT) == POLLOUT) {
               layer2_process_ctm_audio_out(state);
             }
           }
@@ -328,21 +316,22 @@ int ctm_start(void)
             if ((pfds[index].revents & POLLIN) == POLLIN)
               layer2_process_ctm_file_input(state);
           break;
-        case 3:
-          if ((pfds[index].revents & POLLOUT) == POLLOUT)
-            /* debug */
-            layer2_process_ctm_file_output(state);
-          break;
         default:
           errx(1, "ctm_start: invalid pollfd index.");
           break;
       }
     }
 
+    /* process output files here, as these never block. */
+    layer2_process_user_output(state);
+
+    if (!state->ctm_audio_dev_mode)
+      layer2_process_ctm_file_output(state);
+
     /* conditions to break the loop */
     if ((state->numSamplesToProcess > 0 && state->numSamplesToProcess <= state->cntProcessedSamples) ||
         (state->baudotEOF && state->ctmEOF && state->ctmTransmitterIsIdle && (Shortint_fifo_check(&(state->ctmToBaudotFifoState)) == 0) &&
-        (state->numBaudotBitsStillToModulate == 0)))
+         (state->numBaudotBitsStillToModulate == 0)))
       break;
   }
 
