@@ -131,6 +131,7 @@ int main(int argc, char** argv)
     switch (ch) {
       case 's':
         shutdown_on_eof_flag = 1;
+        break;
       case 'c':
         compat_flag = 1;
         break;
